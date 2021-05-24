@@ -2,6 +2,7 @@
 import os
 import numpy as np
 import tensorflow as tf
+from tensorflow.keras import regularizers
 from tensorflow.keras.layers import Dense, Flatten, Conv2D, MaxPool2D, Dropout, BatchNormalization
 from sklearn.model_selection import train_test_split
 
@@ -18,11 +19,30 @@ class CNN(tf.keras.models.Sequential):
         super().__init__()
 
     def create_model(self):
-        self.add(Dense(2000, activation='relu', input_shape=(14, 1)))
-        self.add(Dense(2000, activation='relu'))
-        self.add(Dense(2000, activation='relu'))
-        self.add(Dense(2000, activation='relu'))
-        self.add(Dense(1, activation='sigmoid'))
+        self.add(Dense(2000, activation='relu', input_shape=(14, 1),
+                    kernel_regularizer=regularizers.l2(1e-4),
+                    bias_regularizer=regularizers.l2(1e-4),
+                    activity_regularizer=regularizers.l2(1e-4)))
+        self.add(Dense(2000, activation='relu',
+                 kernel_regularizer=regularizers.l2(1e-4),
+                 bias_regularizer=regularizers.l2(1e-4),
+                 activity_regularizer=regularizers.l2(1e-4)
+                 ))
+        self.add(Dense(2000, activation='relu',
+                 kernel_regularizer=regularizers.l2(1e-4),
+                 bias_regularizer=regularizers.l2(1e-4),
+                 activity_regularizer=regularizers.l2(1e-4)
+                 ))
+        self.add(Dense(2000, activation='relu',
+                 kernel_regularizer=regularizers.l2(1e-4),
+                 bias_regularizer=regularizers.l2(1e-4),
+                 activity_regularizer=regularizers.l2(1e-4)
+                 ))
+        self.add(Dense(1, activation='sigmoid',
+                 kernel_regularizer=regularizers.l2(1e-4),
+                 bias_regularizer=regularizers.l2(1e-4),
+                 activity_regularizer=regularizers.l2(1e-4)
+                 ))
 
         optimizer = tf.keras.optimizers.SGD(learning_rate=0.1)
         self.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
@@ -40,7 +60,7 @@ def train(_argv):
     X_train = X_train[..., tf.newaxis]
     X_test = X_test[..., tf.newaxis]
 
-    batch_size = 512
+    batch_size = 256
 
     train_ds = tf.data.Dataset.from_tensor_slices((X_train, y_train)).shuffle(X_train.shape[0]).batch(batch_size)
     test_ds = tf.data.Dataset.from_tensor_slices((X_test, y_test)).batch(batch_size)
