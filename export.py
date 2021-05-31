@@ -8,7 +8,7 @@ import pandas as pd
 from tqdm.auto import tqdm
 import datetime as dt
 
-def export(data_dir, target_dir, info):
+def export(data_dir, target_dir, info, target_region=None):
 
     lengths = []
     ride_times = []
@@ -18,6 +18,9 @@ def export(data_dir, target_dir, info):
     for i, subdir in tqdm(enumerate(os.listdir(data_dir)), desc='loop over regions', total=len(glob.glob(os.path.join(data_dir, '*')))):
         if not subdir.startswith('.'):
             region = subdir
+
+            if target_region is not None and target_region != region:
+                continue
 
             for j, file in tqdm(enumerate(os.listdir(os.path.join(data_dir, subdir, 'Rides'))), disable=True,
                                 desc='loop over rides in {}'.format(region),
