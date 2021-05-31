@@ -19,7 +19,6 @@ def export(data_dir, target_dir, info):
         if not subdir.startswith('.'):
             region = subdir
 
-            ride_no = 0
             for j, file in tqdm(enumerate(os.listdir(os.path.join(data_dir, subdir, 'Rides'))), disable=True,
                                 desc='loop over rides in {}'.format(region),
                                 total=len(glob.glob(os.path.join(os.path.join(data_dir, subdir, 'Rides'), 'VM2_*')))):
@@ -29,7 +28,6 @@ def export(data_dir, target_dir, info):
                     with open(os.path.join(data_dir, subdir, 'Rides', file)) as f:
                         system_no = f.readline().partition('#')[0]
                         if (system_no.isdecimal() and int(system_no)) >= 73:
-                            ride_no += 1
                             parts = f.read().partition('=========================')
                             incident_info = parts[0]
                             ride_info = parts[2]
@@ -118,7 +116,7 @@ def export(data_dir, target_dir, info):
 
                                         if int(incident) != -5 and (int(ts) == int(incident_ts)):
                                             line_arr = np.genfromtxt(
-                                                StringIO(str(ride_no) + ',' + str(device_os) + ',' + line + ',' + str(
+                                                StringIO(line + ',' + str(
                                                     bike) + ',' + str(childCheckBox) + ',' + str(
                                                     trailerCheckBox) + ',' + str(pLoc) + ',' + str(
                                                     incident) + ',' + str(i1) + ',' + str(i2) + ',' + str(
@@ -129,7 +127,7 @@ def export(data_dir, target_dir, info):
                                         else:
                                             i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, scary = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
                                             line_arr = np.genfromtxt(
-                                                StringIO(str(ride_no) + ',' + str(device_os) + ',' + line + ',' + str(
+                                                StringIO(line + ',' + str(
                                                     bike) + ',' + str(childCheckBox) + ',' + str(
                                                     trailerCheckBox) + ',' + str(pLoc) + ',' + str(
                                                     incident) + ',' + str(i1) + ',' + str(i2) + ',' + str(
@@ -154,7 +152,7 @@ def export(data_dir, target_dir, info):
                                 print('file {} has the wrong format'.format(file))
                                 continue
 
-                            s = 'ride_no,device OS,' + header + ',bike,childCheckBox,trailerCheckBox,pLoc,incident,i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,scary'
+                            s = header + ',bike,childCheckBox,trailerCheckBox,pLoc,incident,i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,scary'
                             df = pd.DataFrame(arr, columns=s.split(','))
 
                             # drop unnecessary columns
@@ -182,4 +180,4 @@ def export(data_dir, target_dir, info):
                             except:
                                 pass
 
-                            df.to_csv(os.path.join(target_dir, split, region, file + '.csv'), ',')
+                            df.to_csv(os.path.join(target_dir, split, region, file + '.csv'), ',', index=False)
