@@ -6,7 +6,7 @@ from io import StringIO
 import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
-
+import datetime as dt
 
 def export(data_dir, target_dir, info):
 
@@ -125,17 +125,19 @@ def export(data_dir, target_dir, info):
                                                     scary)), delimiter=',')
 
                                         else:
-                                            i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, scary = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-                                            line_arr = np.genfromtxt(
-                                                StringIO(line + ',' + str(
-                                                    bike) + ',' + str(childCheckBox) + ',' + str(
-                                                    trailerCheckBox) + ',' + str(pLoc) + ',' + str(
-                                                    incident) + ',' + str(i1) + ',' + str(i2) + ',' + str(
-                                                    i3) + ',' + str(i4) + ',' + str(i5) + ',' + str(i6) + ',' + str(
-                                                    i7) + ',' + str(i8) + ',' + str(i9) + ',' + str(i10) + ',' + str(
-                                                    scary)), delimiter=',')
+                                            incident = 0 if incident != -5 else -5
 
-                                        arr_list.append(line_arr)
+                                    i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, scary = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+                                    line_arr = np.genfromtxt(
+                                        StringIO(line + ',' + str(
+                                            bike) + ',' + str(childCheckBox) + ',' + str(
+                                            trailerCheckBox) + ',' + str(pLoc) + ',' + str(
+                                            incident) + ',' + str(i1) + ',' + str(i2) + ',' + str(
+                                            i3) + ',' + str(i4) + ',' + str(i5) + ',' + str(i6) + ',' + str(
+                                            i7) + ',' + str(i8) + ',' + str(i9) + ',' + str(i10) + ',' + str(
+                                            scary)), delimiter=',')
+
+                                    arr_list.append(line_arr)
 
                             ride_time = (last_time - start_time) / 1000 / 60
 
