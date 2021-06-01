@@ -34,5 +34,25 @@ def linear_interpolate(dir):
                     df.to_csv(os.path.join(dir, split, subdir, file), ',', index=False)
 
 
+def calc_gps_delta(dir):
+    for split in ['train', 'test']:
+
+        for i, subdir in tqdm(enumerate(os.listdir(os.path.join(dir, split))),
+                              desc='apply linear interpolation on {} data'.format(split),
+                              total=len(glob.glob(os.path.join(dir, split, '*')))):
+            if not subdir.startswith('.'):
+                region = subdir
+
+                for j, file in tqdm(enumerate(os.listdir(os.path.join(dir, split, subdir))), disable=True,
+                                    desc='loop over rides in {}'.format(region),
+                                    total=len(glob.glob(os.path.join(dir, split, subdir, 'VM2_*')))):
+                    df = pd.read_csv(os.path.join(dir, split, subdir, file))
+
+                    df[['lat', 'lon']] = df[['lat', 'lon']].diff().fillna(0)
+
+                    df.to_csv(os.path.join(dir, split, subdir, file), ',', index=False)
+
+
 def preprocess(dir):
     linear_interpolate(dir)
+    calc_gps_delta(dir)
