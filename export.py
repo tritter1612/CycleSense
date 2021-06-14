@@ -1,4 +1,3 @@
-
 import os
 import glob
 from io import StringIO
@@ -7,14 +6,15 @@ import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
 
-def export(data_dir, target_dir, info, target_region=None):
 
+def export(data_dir, target_dir, info, target_region=None):
     lengths = []
     ride_times = []
     start_time = -1
     incident_counter = 0
 
-    for i, subdir in tqdm(enumerate(os.listdir(data_dir)), desc='loop over regions', total=len(glob.glob(os.path.join(data_dir, '*')))):
+    for i, subdir in tqdm(enumerate(os.listdir(data_dir)), desc='loop over regions',
+                          total=len(glob.glob(os.path.join(data_dir, '*')))):
         if not subdir.startswith('.'):
             region = subdir
 
@@ -163,9 +163,12 @@ def export(data_dir, target_dir, info, target_region=None):
                             df.drop(['obsDistanceLeft1', 'obsDistanceLeft2', 'obsDistanceRight1', 'obsDistanceRight2',
                                      'obsClosePassEvent'], 1, inplace=True)
 
-                            if int(file[-1]) in [3, 6, 9]:
+                            if int(file[-1]) in [6, 7]:
                                 # test set
                                 split = 'test'
+                            elif int(file[-1]) in [8, 9]:
+                                # validation set
+                                split = 'val'
                             else:
                                 # train set
                                 split = 'train'
@@ -173,6 +176,7 @@ def export(data_dir, target_dir, info, target_region=None):
                             try:
                                 os.mkdir(os.path.join(target_dir, 'train'))
                                 os.mkdir(os.path.join(target_dir, 'test'))
+                                os.mkdir(os.path.join(target_dir, 'val'))
                             except:
                                 pass
 
