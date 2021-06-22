@@ -1,10 +1,40 @@
 import os
 import glob
 
+import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
 from sklearn.preprocessing import MaxAbsScaler
 import datetime as dt
+
+
+def remove_invalid_rides(dir, target_region=None):
+    for split in ['train', 'test', 'val']:
+
+        for i, subdir in tqdm(enumerate(os.listdir(os.path.join(dir, split))),
+                              desc='remove invalid rides in {} data'.format(split),
+                              total=len(glob.glob(os.path.join(dir, split, '*')))):
+            if not subdir.startswith('.'):
+                region = subdir
+
+                if target_region is not None and target_region != region:
+                    continue
+
+                for j, file in tqdm(enumerate(os.listdir(os.path.join(dir, split, subdir))), disable=True,
+                                    desc='loop over rides in {}'.format(region),
+                                    total=len(glob.glob(os.path.join(dir, split, subdir, 'VM2_*')))):
+
+                    if file.startswith('VM2_'):
+
+                        df = pd.read_csv(os.path.join(dir, split, subdir, file))
+
+                        df_cp = df.copy(deep=True)
+                        df_cp['timeStamp'] = df_cp['timeStamp'].diff()
+
+                        breakpoints = np.where((df_cp['timeStamp'] > 6000).to_numpy())
+
+                        if len(breakpoints[0]) > 0:
+                            os.remove(os.path.join(dir, split, subdir, file))
 
 
 def linear_interpolate(dir, target_region=None):
@@ -110,13 +140,15 @@ def scale(dir, target_region=None):
 
                     if file.startswith('VM2_'):
                         df = pd.read_csv(os.path.join(dir, split, subdir, file))
-                        df[['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'XL', 'YL', 'ZL']] = scaler_maxabs.transform(
+                        df[['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'XL', 'YL',
+                            'ZL']] = scaler_maxabs.transform(
                             df[['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'XL', 'YL', 'ZL']])
 
                         df.to_csv(os.path.join(dir, split, subdir, file), ',', index=False)
 
 
 def preprocess(dir, target_region=None):
+    remove_invalid_rides(dir, target_region)
     linear_interpolate(dir, target_region)
     calc_gps_delta(dir, target_region)
     scale(dir, target_region)
