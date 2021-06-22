@@ -1,75 +1,68 @@
-
 import os
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import regularizers
 from tensorflow.keras.layers import Dense, Flatten, Conv2D, MaxPool2D, Dropout, BatchNormalization
-from sklearn.model_selection import train_test_split
 
-from absl import app, flags
-from absl.flags import FLAGS
 
-flags.DEFINE_string('data_dir','../../Data/Datasets/dataset6.csv', 'path to dataset')
-flags.DEFINE_integer('epochs', 5, 'number of training epochs')
-flags.DEFINE_string('checkpoint_dir', 'checkpoints/cnn/training', 'path to save model')
+def pack_features_vector(features, labels):
+    """Pack the features into a single array."""
+    features = tf.stack(list(features.values()), axis=1)
+    return features, labels
 
-class CNN(tf.keras.models.Sequential):
+
+class DNN(tf.keras.models.Sequential):
 
     def __init__(self):
         super().__init__()
 
     def create_model(self):
-        self.add(Dense(2000, activation='relu', input_shape=(14, 1),
-                    kernel_regularizer=regularizers.l2(1e-4),
-                    bias_regularizer=regularizers.l2(1e-4),
-                    activity_regularizer=regularizers.l2(1e-4)))
-        self.add(Dense(2000, activation='relu',
-                 kernel_regularizer=regularizers.l2(1e-4),
-                 bias_regularizer=regularizers.l2(1e-4),
-                 activity_regularizer=regularizers.l2(1e-4)
-                 ))
-        self.add(Dense(2000, activation='relu',
-                 kernel_regularizer=regularizers.l2(1e-4),
-                 bias_regularizer=regularizers.l2(1e-4),
-                 activity_regularizer=regularizers.l2(1e-4)
-                 ))
-        self.add(Dense(2000, activation='relu',
-                 kernel_regularizer=regularizers.l2(1e-4),
-                 bias_regularizer=regularizers.l2(1e-4),
-                 activity_regularizer=regularizers.l2(1e-4)
-                 ))
-        self.add(Dense(1, activation='sigmoid',
-                 kernel_regularizer=regularizers.l2(1e-4),
-                 bias_regularizer=regularizers.l2(1e-4),
-                 activity_regularizer=regularizers.l2(1e-4)
-                 ))
+
+        self.add(Dense(100, activation='relu'))
+        self.add(Dense(100, activation='relu'))
+        self.add(Dense(100, activation='relu'))
+        self.add(Flatten())
+        self.add(Dense(1, activation='softmax'))
 
         optimizer = tf.keras.optimizers.SGD(learning_rate=0.1)
-        self.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+        self.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
 
-def train(_argv):
-    data_dir = FLAGS.data_dir
-    data = np.genfromtxt(data_dir, delimiter=',')
-    X, y = data[:,:14], data[:,14]
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33)
-    X_train, y_train = tf.convert_to_tensor(X_train, dtype=tf.float32), tf.convert_to_tensor(y_train, dtype=tf.float32)
-    X_test, y_test = tf.convert_to_tensor(X_test, dtype=tf.float32), tf.convert_to_tensor(y_test, dtype=tf.float32)
+def train(dir, checkpoint_dir, target_region=None, batch_size=22):
+    data_train = tf.data.experimental.make_csv_dataset(os.path.join(dir, 'train', target_region, '*.csv'),
+                                                       batch_size=batch_size, label_name='incident',
+                                                       num_parallel_reads=int(batch_size / 22),
+                                                       select_columns=['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b',
+                                                                       'c', 'XL', 'YL', 'ZL', 'RX', 'RY', 'RZ', 'RC',
+                                                                       'bike', 'childCheckBox', 'trailerCheckBox',
+                                                                       'pLoc', 'i1', 'i2', 'i3', 'i4', 'i5', 'i6', 'i7',
+                                                                       'i8', 'i9', 'i10', 'scary', 'incident'])
+    data_test = tf.data.experimental.make_csv_dataset(os.path.join(dir, 'test', target_region, '*.csv'),
+                                                      batch_size=batch_size, label_name='incident',
+                                                      num_parallel_reads=int(batch_size / 22),
+                                                      select_columns=['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c',
+                                                                      'XL', 'YL', 'ZL', 'RX', 'RY', 'RZ', 'RC', 'bike',
+                                                                      'childCheckBox', 'trailerCheckBox', 'pLoc', 'i1',
+                                                                      'i2', 'i3', 'i4', 'i5', 'i6', 'i7', 'i8', 'i9',
+                                                                      'i10', 'scary', 'incident'])
+    data_val = tf.data.experimental.make_csv_dataset(os.path.join(dir, 'val', target_region, '*.csv'),
+                                                     batch_size=batch_size,
+                                                     label_name='incident', num_parallel_reads=int(batch_size / 22),
+                                                     select_columns=['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c',
+                                                                     'XL', 'YL', 'ZL', 'RX', 'RY', 'RZ', 'RC', 'bike',
+                                                                     'childCheckBox', 'trailerCheckBox', 'pLoc', 'i1',
+                                                                     'i2', 'i3', 'i4', 'i5', 'i6', 'i7', 'i8', 'i9',
+                                                                     'i10', 'scary', 'incident'])
 
-    # Add a channels dimension
-    X_train = X_train[..., tf.newaxis]
-    X_test = X_test[..., tf.newaxis]
+    train_ds = data_train.map(pack_features_vector)
+    val_ds = data_val.map(pack_features_vector)
+    test_ds = data_test.map(pack_features_vector)
 
-    batch_size = 256
-
-    train_ds = tf.data.Dataset.from_tensor_slices((X_train, y_train)).shuffle(X_train.shape[0]).batch(batch_size)
-    test_ds = tf.data.Dataset.from_tensor_slices((X_test, y_test)).batch(batch_size)
-
-    model = CNN()
+    model = DNN()
     model.create_model()
 
-    latest = tf.train.latest_checkpoint(os.path.dirname(FLAGS.checkpoint_dir))
-    checkpoint_dir = FLAGS.checkpoint_dir
+    latest = tf.train.latest_checkpoint(os.path.dirname(checkpoint_dir))
+    checkpoint_dir = checkpoint_dir
     try:
         model.load_weights(latest)
     except:
@@ -91,12 +84,7 @@ def train(_argv):
         patience=5,
         verbose=1)
 
-    model.summary()
+    # model.summary()
 
-    model.fit(train_ds, validation_data=test_ds, epochs=FLAGS.epochs, callbacks=[cp_callback, es_callback])
-
-if __name__ == '__main__':
-    try:
-        app.run(train)
-    except SystemExit:
-        pass
+    model.fit(train_ds, validation_data=val_ds, epochs=5, callbacks=[cp_callback, es_callback])
+    model.eval(test_ds)
