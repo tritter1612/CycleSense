@@ -3,12 +3,12 @@ import glob
 
 import pandas as pd
 from tqdm.auto import tqdm
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MaxAbsScaler
 import datetime as dt
 
 
 def linear_interpolate(dir, target_region=None):
-    for split in ['train', 'test']:
+    for split in ['train', 'test', 'val']:
 
         for i, subdir in tqdm(enumerate(os.listdir(os.path.join(dir, split))),
                               desc='apply linear interpolation on {} data'.format(split),
@@ -22,24 +22,34 @@ def linear_interpolate(dir, target_region=None):
                 for j, file in tqdm(enumerate(os.listdir(os.path.join(dir, split, subdir))), disable=True,
                                     desc='loop over rides in {}'.format(region),
                                     total=len(glob.glob(os.path.join(dir, split, subdir, 'VM2_*')))):
-                    df = pd.read_csv(os.path.join(dir, split, subdir, file))
 
-                    # set timeStamp col as pandas datetime index
-                    df['timeStamp'] = df['timeStamp'].apply(
-                        lambda x: dt.datetime.utcfromtimestamp(x / 1000).strftime('%d.%m.%Y %H:%M:%S,%f'))
-                    df['timeStamp'] = pd.to_datetime(df['timeStamp'])
-                    df = df.set_index(pd.DatetimeIndex(df['timeStamp']))
+                    if file.startswith('VM2_'):
+                        df = pd.read_csv(os.path.join(dir, split, subdir, file))
 
-                    # linear interpolation of missing values
-                    df['lat'].interpolate(method='time', inplace=True)
-                    df['lon'].interpolate(method='time', inplace=True)
-                    df['acc'].interpolate(method='time', inplace=True)
+                        # convert timestamp to datetime format
+                        df['timeStamp'] = df['timeStamp'].apply(
+                            lambda x: dt.datetime.utcfromtimestamp(x / 1000).isoformat())
 
-                    df.to_csv(os.path.join(dir, split, subdir, file), ',', index=False)
+                        # set timeStamp col as pandas datetime index
+                        df['timeStamp'] = pd.to_datetime(df['timeStamp'])
+                        df = df.set_index(pd.DatetimeIndex(df['timeStamp']))
+
+                        # interpolation of acc via linear interpolation based on timestamp
+                        df['acc'].interpolate(method='time', inplace=True)
+
+                        df.sort_index(axis=0, ascending=False, inplace=True)
+
+                        # interpolation of missing values via padding on the reversed df
+                        df['lat'].interpolate(method='pad', inplace=True)
+                        df['lon'].interpolate(method='pad', inplace=True)
+
+                        df.sort_index(axis=0, ascending=True, inplace=True)
+
+                        df.to_csv(os.path.join(dir, split, subdir, file), ',', index=False)
 
 
 def calc_gps_delta(dir, target_region=None):
-    for split in ['train', 'test']:
+    for split in ['train', 'test', 'val']:
 
         for i, subdir in tqdm(enumerate(os.listdir(os.path.join(dir, split))),
                               desc='calculate gps delta on {} data'.format(split),
@@ -61,8 +71,7 @@ def calc_gps_delta(dir, target_region=None):
 
 
 def scale(dir, target_region=None):
-    scaler = MinMaxScaler(feature_range=(-1, 1))
-    acc_scaler = MinMaxScaler(feature_range=(0, 1))
+    scaler_maxabs = MaxAbsScaler()
 
     split = 'train'
 
@@ -78,15 +87,14 @@ def scale(dir, target_region=None):
                                 desc='loop over rides in {}'.format(region),
                                 total=len(glob.glob(os.path.join(dir, split, subdir, 'VM2_*')))):
 
-                df = pd.read_csv(os.path.join(dir, split, subdir, file))
+                if file.startswith('VM2_'):
+                    df = pd.read_csv(os.path.join(dir, split, subdir, file))
 
-                if df[['XL', 'YL', 'ZL']].isnull().values.any():
-                    os.remove(os.path.join(dir, split, subdir, file))
+                    df.fillna(0, inplace=True)
 
-                scaler.partial_fit(df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c', 'XL', 'YL', 'ZL']])
-                acc_scaler.partial_fit(df[['acc']])
+                    scaler_maxabs.partial_fit(df[['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'XL', 'YL', 'ZL']])
 
-    for split in ['train', 'test']:
+    for split in ['train', 'test', 'val']:
 
         for i, subdir in tqdm(enumerate(os.listdir(os.path.join(dir, split))), desc='scale {} data'.format(split),
                               total=len(glob.glob(os.path.join(dir, split, '*')))):
@@ -99,12 +107,13 @@ def scale(dir, target_region=None):
                 for j, file in tqdm(enumerate(os.listdir(os.path.join(dir, split, subdir))), disable=True,
                                     desc='loop over rides in {}'.format(region),
                                     total=len(glob.glob(os.path.join(dir, split, subdir, 'VM2_*')))):
-                    df = pd.read_csv(os.path.join(dir, split, subdir, file))
-                    df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c', 'XL', 'YL', 'ZL']] = scaler.transform(
-                        df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c', 'XL', 'YL', 'ZL']])
-                    df[['acc']] = acc_scaler.transform(df[['acc']])
 
-                    df.to_csv(os.path.join(dir, split, subdir, file), ',', index=False)
+                    if file.startswith('VM2_'):
+                        df = pd.read_csv(os.path.join(dir, split, subdir, file))
+                        df[['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'XL', 'YL', 'ZL']] = scaler_maxabs.transform(
+                            df[['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'XL', 'YL', 'ZL']])
+
+                        df.to_csv(os.path.join(dir, split, subdir, file), ',', index=False)
 
 
 def preprocess(dir, target_region=None):
