@@ -7,10 +7,11 @@ import datetime as dt
 import multiprocessing as mp
 from tqdm.auto import tqdm
 from sklearn.preprocessing import MaxAbsScaler
+import math
 from functools import partial
 
 
-def remove_invalid_rides(dir, target_region=None):
+def remove_invalid_rides(dir, target_region=None, bucket_size=22):
     for split in ['train', 'test', 'val']:
 
         for i, subdir in tqdm(enumerate(os.listdir(os.path.join(dir, split))),
@@ -35,7 +36,11 @@ def remove_invalid_rides(dir, target_region=None):
 
                         breakpoints = np.where((df_cp['timeStamp'] > 6000).to_numpy())
 
-                        if len(breakpoints[0]) > 0:
+                        df_cp.dropna(inplace=True, axis=0)
+
+                        if len(df_cp) == 0 or len(breakpoints[0]) > 0:
+                            # remove rides where one col is completely empty or timestamp interval is too long
+                            # print(os.path.join(dir, split, subdir, file))
                             os.remove(os.path.join(dir, split, subdir, file))
 
 
@@ -178,7 +183,11 @@ def linear_interpolate(dir, target_region=None):
 
                         # set timeStamp col as pandas datetime index
                         df['timeStamp'] = pd.to_datetime(df['timeStamp'])
+
                         df = df.set_index(pd.DatetimeIndex(df['timeStamp']))
+
+                        # drop all duplicate occurrences of the labels and keep the first occurrence
+                        df = df[~df.index.duplicated(keep='first')]
 
                         # interpolation of acc via linear interpolation based on timestamp
                         df['acc'].interpolate(method='time', inplace=True)
@@ -265,6 +274,30 @@ def remove_vel_outliers(dir, target_region=None):
                             df.to_csv(os.path.join(dir, split, subdir, file), ',', index=False)
 
 
+def remove_empty_rows(dir, target_region=None):
+    for split in ['train', 'test', 'val']:
+
+        for i, subdir in tqdm(enumerate(os.listdir(os.path.join(dir, split))),
+                              desc='remove empty rows in {} data'.format(split),
+                              total=len(glob.glob(os.path.join(dir, split, '*')))):
+            if not subdir.startswith('.'):
+                region = subdir
+
+                if target_region is not None and target_region != region:
+                    continue
+
+                for j, file in enumerate(os.listdir(os.path.join(dir, split, subdir))):
+
+                    if file.startswith('VM2_'):
+                        df = pd.read_csv(os.path.join(dir, split, subdir, file))
+                        df.dropna(inplace=True, axis=0)
+
+                        if len(df) != 0:
+                            df.to_csv(os.path.join(dir, split, subdir, file), ',', index=False)
+                        else:
+                            os.remove(os.path.join(dir, split, subdir, file))
+
+
 def scale(dir, target_region=None):
     scaler_maxabs = MaxAbsScaler()
 
@@ -312,10 +345,58 @@ def scale(dir, target_region=None):
                         df.to_csv(os.path.join(dir, split, subdir, file), ',', index=False)
 
 
-def preprocess(dir, target_region=None):
-    remove_invalid_rides(dir, target_region)
+def create_buckets(dir, target_region=None, bucket_size=22):
+    for split in ['train', 'test', 'val']:
+
+        for i, subdir in tqdm(enumerate(os.listdir(os.path.join(dir, split))),
+                              desc='generate buckets for {} data'.format(split),
+                              total=len(glob.glob(os.path.join(dir, split, '*')))):
+            if not subdir.startswith('.'):
+                region = subdir
+
+                if target_region is not None and target_region != region:
+                    continue
+
+                for j, file in tqdm(enumerate(os.listdir(os.path.join(dir, split, subdir))), disable=True,
+                                    desc='loop over rides in {}'.format(region),
+                                    total=len(glob.glob(os.path.join(dir, split, subdir, 'VM2_*')))):
+
+                    if file.startswith('VM2_'):
+
+                        df = pd.read_csv(os.path.join(dir, split, subdir, file))
+
+                        length = df.shape[0]
+                        num_splits = math.floor(length / bucket_size)
+                        length_new = num_splits * bucket_size
+
+                        if num_splits >= 1:
+
+                            df_splits = np.array_split(df.iloc[:length_new, :], num_splits)
+
+                            for k, df_split in enumerate(df_splits):
+
+                                if (np.any((df_split['incident'] == 1.0).to_numpy())):
+                                    df_split['incident'] = 1.0
+                                    df_split.to_csv(os.path.join(dir, split, subdir,
+                                                                 file.replace('.csv', '') + '_bucket_incident' + str(
+                                                                     k) + '.csv'), ',',
+                                                    index=False)
+                                else:
+                                    df_split.to_csv(os.path.join(dir, split, subdir,
+                                                                 file.replace('.csv', '') + '_bucket' + str(
+                                                                     k) + '.csv'), ',',
+                                                    index=False)
+
+                        os.remove(os.path.join(dir, split, subdir, file))
+
+
+def preprocess(dir, target_region=None, bucket_size=22):
+    remove_invalid_rides(dir, target_region, bucket_size)
     remove_acc_outliers(dir, target_region)
     calc_vel_delta(dir, target_region)
     linear_interpolate(dir, target_region)
     remove_vel_outliers(dir, target_region)
+    remove_empty_rows(dir, target_region)
+    # TODO: add vector rotation
     scale(dir, target_region)
+    create_buckets(dir, target_region, 22)
