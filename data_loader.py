@@ -5,16 +5,31 @@ import tensorflow as tf
 
 model = None
 
-
 def pack_features_vector(features, labels):
     """Pack the features into a single array."""
 
     features = tf.stack(list(features.values()), axis=1)
 
+    if model == 'LSTM':
+        features = tf.reshape(features, (-1, 22, 20))
+        labels = tf.reshape(labels, (-1, 22,))
+        labels = tf.reduce_mean(labels, axis=1)
+
+    if model == 'CNNLSTM':
+        features = tf.reshape(features, (-1, 2, 11, 20))
+        labels = tf.reshape(labels, (-1, 22,))
+        labels = tf.reduce_mean(labels, axis=1)
+
+    if model == 'ConvLSTM':
+        features = tf.reshape(features, (-1, 2, 1, 11, 20))
+        labels = tf.reshape(labels, (-1, 22,))
+        labels = tf.reduce_mean(labels, axis=1)
+
     return features, labels
 
 
 def load_data(dir, target_region, batch_size=22, modeln='DNN'):
+
     global model
     model = modeln
 
