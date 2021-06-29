@@ -175,3 +175,10 @@ def export(data_dir, target_dir, target_region=None):
 
             with mp.Pool(4) as pool:
                 pool.map(partial(export_file, target_dir), file_list)
+
+
+if __name__ == '__main__':
+    data_dir = './Regions/'
+    target_dir = './Ride_Data/'
+    target_region = None
+    export(data_dir, target_dir, target_region)
