@@ -124,7 +124,7 @@ def train(model, optimizer, criterion, n_epochs, train_loader, val_loader, patie
 
 if __name__ == '__main__':
 
-    train_loader, val_loader, test_loader = load_data('./Ride_Data', batch_size=8192)
+    train_loader, val_loader, test_loader = load_data('../Ride_Data', batch_size=8192)
 
     n_epochs = 1000
     patience = 1000

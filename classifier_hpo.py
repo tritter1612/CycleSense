@@ -65,7 +65,7 @@ def train(run_dir, hparams, train_ds, val_ds, test_ds, num_epochs=10, patience=1
 
 
 if __name__ == '__main__':
-    dir = './Ride_Data'
+    dir = '../Ride_Data'
     checkpoint_dir = 'checkpoints/cnn/training'
     target_region = 'Berlin'
     batch_size = (2 ** 12) * 22

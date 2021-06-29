@@ -431,7 +431,7 @@ def preprocess(dir, target_region=None, bucket_size=22):
 
 
 if __name__ == '__main__':
-    dir = './Ride_Data'
+    dir = '../Ride_Data'
     target_region = None
     bucket_size = 22
     preprocess(dir, target_region, bucket_size)
