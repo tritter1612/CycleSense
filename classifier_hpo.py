@@ -14,7 +14,7 @@ class CNN_LSTM_(tf.keras.models.Sequential):
     def create_model(self, hparams):
         self.add(TimeDistributed(
             Conv1D(filters=hparams[HP_NUM_KERNELS_L1], kernel_size=hparams[HP_KERNEL_SIZE_L1], activation='relu',
-                   input_shape=(None, 2, 11, 9))))
+                   input_shape=(None, 2, 11, 20))))
         self.add(TimeDistributed(
             Conv1D(filters=hparams[HP_NUM_KERNELS_L2], kernel_size=hparams[HP_KERNEL_SIZE_L2], activation='relu')))
         self.add(TimeDistributed(Dropout(hparams[HP_DROPOUT_L1])))
