@@ -13,16 +13,16 @@ class CNN_LSTM_(tf.keras.models.Sequential):
 
     def create_model(self, hparams):
         self.add(TimeDistributed(
-            Conv1D(filters=hparams[HP_NUM_KERNELS_L1], kernel_size=hparams[HP_KERNEL_SIZE_L1], activation='relu',
+            Conv1D(filters=hparams[HP_NUM_KERNELS_L1], kernel_size=hparams[HP_KERNEL_SIZE_L1], activation='relu', strides=hparams[HP_STRIDE_L1],
                    input_shape=(None, 2, 11, 20))))
         self.add(TimeDistributed(
-            Conv1D(filters=hparams[HP_NUM_KERNELS_L2], kernel_size=hparams[HP_KERNEL_SIZE_L2], activation='relu')))
+            Conv1D(filters=hparams[HP_NUM_KERNELS_L2], kernel_size=hparams[HP_KERNEL_SIZE_L2], activation='relu', strides=hparams[HP_STRIDE_L2])))
         self.add(TimeDistributed(Dropout(hparams[HP_DROPOUT_L1])))
-        self.add(TimeDistributed(MaxPooling1D(pool_size=2)))
+        self.add(TimeDistributed(MaxPooling1D()))
         self.add(TimeDistributed(Flatten()))
-        self.add(LSTM(100))
+        self.add(LSTM(hparams[HP_LSTM_UNITS]))
         self.add(Dropout(hparams[HP_DROPOUT_L2]))
-        self.add(Dense(100, activation='relu'))
+        self.add(Dense(hparams[HP_HIDDEN_UNITS], activation='relu'))
         self.add(Dense(1, activation='sigmoid'))
         optimizer = tf.keras.optimizers.Adam(learning_rate=hparams[HP_LR])
         self.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
@@ -32,8 +32,6 @@ def train(run_dir, hparams, train_ds, val_ds, test_ds, num_epochs=10, patience=1
           checkpoint_dir='checkpoints/cnn/training'):
     model = CNN_LSTM_()
     model.create_model(hparams)
-
-    # latest = tf.train.latest_checkpoint(os.path.dirname(checkpoint_dir))
 
     # Create a callback that saves the model's weights
     cp_callback = tf.keras.callbacks.ModelCheckpoint(
@@ -76,17 +74,21 @@ if __name__ == '__main__':
     HP_NUM_KERNELS_L2 = hp.HParam('num_kernels_l2', hp.Discrete([8, 16, 32, 64, 128]))
     HP_KERNEL_SIZE_L1 = hp.HParam('kernel_size_l1', hp.Discrete([3, 5, 7]))
     HP_KERNEL_SIZE_L2 = hp.HParam('kernel_size_l2', hp.Discrete([3, 5, 7]))
+    HP_STRIDE_L1 = hp.HParam('stride_size_l1', hp.Discrete([1, 3, 5]))
+    HP_STRIDE_L2 = hp.HParam('stride_size_l2', hp.Discrete([1, 3, 5]))
     HP_DROPOUT_L1 = hp.HParam('dropout_l1', hp.Discrete([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]))
     HP_DROPOUT_L2 = hp.HParam('dropout_l2', hp.Discrete([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]))
+    HP_LSTM_UNITS = hp.HParam('lstm_units', hp.Discrete([32, 64, 128, 256, 512]))
+    HP_HIDDEN_UNITS = hp.HParam('hidden_units', hp.Discrete([32, 64, 128, 256, 512]))
     HP_LR = hp.HParam('learning_rate', hp.Discrete([0.1, 0.01, 0.001, 0.0001]))
 
     METRIC_ACCURACY = 'val_accuracy'
 
     with tf.summary.create_file_writer('logs/hparam_tuning').as_default():
         hp.hparams_config(
-            hparams=[HP_NUM_KERNELS_L1, HP_NUM_KERNELS_L2, HP_KERNEL_SIZE_L1, HP_KERNEL_SIZE_L2, HP_DROPOUT_L1,
-                     HP_DROPOUT_L2, HP_LR],
-            metrics=[hp.Metric(METRIC_ACCURACY, display_name='VAL_Accuracy')],
+            hparams=[HP_NUM_KERNELS_L1, HP_NUM_KERNELS_L2, HP_KERNEL_SIZE_L1, HP_KERNEL_SIZE_L2, HP_STRIDE_L1, HP_STRIDE_L2, HP_DROPOUT_L1,
+                     HP_DROPOUT_L2, HP_LSTM_UNITS, HP_HIDDEN_UNITS, HP_LR],
+            metrics=[hp.Metric(METRIC_ACCURACY, display_name='val_accuracy')],
         )
 
     session_num = 0
@@ -97,29 +99,37 @@ if __name__ == '__main__':
         for num_kernels_l2 in HP_NUM_KERNELS_L2.domain.values:
             for kernel_size_l1 in HP_KERNEL_SIZE_L1.domain.values:
                 for kernel_size_l2 in HP_KERNEL_SIZE_L2.domain.values:
-                    for dropout_rate_l1 in HP_DROPOUT_L1.domain.values:
-                        for dropout_rate_l2 in HP_DROPOUT_L2.domain.values:
-                            for learning_rate in HP_LR.domain.values:
-                                hparams = {
-                                    HP_NUM_KERNELS_L1: num_kernels_l1,
-                                    HP_NUM_KERNELS_L2: num_kernels_l2,
-                                    HP_KERNEL_SIZE_L1: kernel_size_l1,
-                                    HP_KERNEL_SIZE_L2: kernel_size_l2,
-                                    HP_DROPOUT_L1: dropout_rate_l1,
-                                    HP_DROPOUT_L2: dropout_rate_l2,
-                                    HP_LR: learning_rate,
-                                }
+                    for stride_size_l1 in HP_STRIDE_L1.domain.values:
+                        for stride_size_l2 in HP_STRIDE_L2.domain.values:
+                            for dropout_rate_l1 in HP_DROPOUT_L1.domain.values:
+                                for dropout_rate_l2 in HP_DROPOUT_L2.domain.values:
+                                    for lstm_units in HP_LSTM_UNITS.domain.values:
+                                        for hidden_units in HP_HIDDEN_UNITS.domain.values:
+                                            for learning_rate in HP_LR.domain.values:
+                                                hparams = {
+                                                    HP_NUM_KERNELS_L1: num_kernels_l1,
+                                                    HP_NUM_KERNELS_L2: num_kernels_l2,
+                                                    HP_KERNEL_SIZE_L1: kernel_size_l1,
+                                                    HP_KERNEL_SIZE_L2: kernel_size_l2,
+                                                    HP_STRIDE_L1: stride_size_l1,
+                                                    HP_STRIDE_L2: stride_size_l2,
+                                                    HP_DROPOUT_L1: dropout_rate_l1,
+                                                    HP_DROPOUT_L2: dropout_rate_l2,
+                                                    HP_LSTM_UNITS: lstm_units,
+                                                    HP_HIDDEN_UNITS: hidden_units,
+                                                    HP_LR: learning_rate,
+                                                }
 
-                                try:
-                                    os.rmdir(checkpoint_dir)
-                                except:
-                                    pass
+                                                try:
+                                                    os.rmdir(checkpoint_dir)
+                                                except:
+                                                    pass
 
-                                print('')
-                                run_name = "run-%d" % session_num
-                                print('--- Starting trial: %s' % run_name)
-                                print({h.name: hparams[h] for h in hparams})
-                                train('logs/hparam_tuning/' + run_name, hparams, train_ds, val_ds, test_ds, num_epochs,
-                                      patience,
-                                      checkpoint_dir)
-                                session_num += 1
+                                                print('')
+                                                run_name = "run-%d" % session_num
+                                                print('--- Starting trial: %s' % run_name)
+                                                print({h.name: hparams[h] for h in hparams})
+                                                train('logs/hparam_tuning/' + run_name, hparams, train_ds, val_ds, test_ds, num_epochs,
+                                                      patience,
+                                                      checkpoint_dir)
+                                                session_num += 1
