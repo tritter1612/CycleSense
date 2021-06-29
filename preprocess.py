@@ -11,7 +11,7 @@ import math
 from functools import partial
 
 
-def remove_invalid_rides(dir, target_region=None, bucket_size=22):
+def remove_invalid_rides(dir, target_region=None):
     for split in ['train', 'test', 'val']:
 
         for i, subdir in tqdm(enumerate(os.listdir(os.path.join(dir, split))),
@@ -298,6 +298,32 @@ def remove_empty_rows(dir, target_region=None):
                             os.remove(os.path.join(dir, split, subdir, file))
 
 
+def getRotationMatrixFromVector(RX, RY, RZ, RC):
+    R = np.zeros((3, 3))
+
+    sq_q1 = 2 * RX * RX
+    sq_q2 = 2 * RY * RY
+    sq_q3 = 2 * RZ * RZ
+    q1_q2 = 2 * RX * RY
+    q3_q0 = 2 * RZ * RC
+    q1_q3 = 2 * RX * RZ
+    q2_q0 = 2 * RY * RC
+    q2_q3 = 2 * RY * RZ
+    q1_q0 = 2 * RX * RC
+
+    R[0, 0] = 1 - sq_q2 - sq_q3
+    R[1, 0] = q1_q2 - q3_q0
+    R[2, 0] = q1_q3 + q2_q0
+    R[0, 1] = q1_q2 + q3_q0
+    R[1, 1] = 1 - sq_q1 - sq_q3
+    R[2, 1] = q2_q3 - q1_q0
+    R[0, 2] = q1_q3 - q2_q0
+    R[1, 2] = q2_q3 + q1_q0
+    R[2, 2] = 1 - sq_q1 - sq_q2
+
+    return R
+
+
 def scale(dir, target_region=None):
     scaler_maxabs = MaxAbsScaler()
 
@@ -391,7 +417,7 @@ def create_buckets(dir, target_region=None, bucket_size=22):
 
 
 def preprocess(dir, target_region=None, bucket_size=22):
-    remove_invalid_rides(dir, target_region, bucket_size)
+    remove_invalid_rides(dir, target_region)
     remove_acc_outliers(dir, target_region)
     calc_vel_delta(dir, target_region)
     linear_interpolate(dir, target_region)
@@ -399,4 +425,11 @@ def preprocess(dir, target_region=None, bucket_size=22):
     remove_empty_rows(dir, target_region)
     # TODO: add vector rotation
     scale(dir, target_region)
-    create_buckets(dir, target_region, 22)
+    create_buckets(dir, target_region, bucket_size)
+
+
+if __name__ == '__main__':
+    dir = './Ride_Data'
+    target_region = None
+    bucket_size = 22
+    preprocess(dir, target_region, bucket_size)
