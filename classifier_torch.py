@@ -120,3 +120,32 @@ def train(model, optimizer, criterion, n_epochs, train_loader, val_loader, patie
         if epochs_no_improvement >= patience:
             print('Early stopping!')
             break
+
+
+if __name__ == '__main__':
+
+    train_loader, val_loader, test_loader = load_data('./Ride_Data', batch_size=8192)
+
+    n_epochs = 1000
+    patience = 1000
+    save_path = 'classifier.model'
+
+    # defining the model
+    model = Net()
+    try:
+        model.load_state_dict(torch.load(save_path))
+    except FileNotFoundError:
+        print('train new model')
+
+    # defining the optimizer
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
+    # defining the loss function
+    criterion = nn.BCEWithLogitsLoss()
+
+    if torch.cuda.is_available():
+        model = model.cuda()
+        criterion = criterion.cuda()
+
+    # training the model
+    train(model, optimizer, criterion, n_epochs, train_loader, val_loader, patience=patience, save_path=save_path)
