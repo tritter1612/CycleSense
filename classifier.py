@@ -107,3 +107,14 @@ def train(train_ds, val_ds, test_ds, num_epochs=10, patience=1, checkpoint_dir='
     print('Model evaluation on test set:')
     model.evaluate(test_ds)
 
+
+if __name__ == '__main__':
+    dir = './Ride_Data'
+    checkpoint_dir = 'checkpoints/cnn/training'
+    target_region = 'Berlin'
+    batch_size = (2 ** 12) * 22
+    num_epochs = 100
+    patience = 5
+
+    train_ds, val_ds, test_ds = load_data(dir, target_region, batch_size, modeln='CNNLSTM')
+    train(train_ds, val_ds, test_ds, num_epochs, patience, checkpoint_dir)
