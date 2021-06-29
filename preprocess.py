@@ -371,6 +371,28 @@ def scale(dir, target_region=None):
                         df.to_csv(os.path.join(dir, split, subdir, file), ',', index=False)
 
 
+def create_bucket(bucket_size, file):
+    df = pd.read_csv(file)
+
+    length = df.shape[0]
+    num_splits = math.floor(length / bucket_size)
+    length_new = num_splits * bucket_size
+
+    if num_splits >= 1:
+
+        df_splits = np.array_split(df.iloc[:length_new, :], num_splits)
+
+        for k, df_split in enumerate(df_splits):
+
+            if (np.any((df_split['incident'] == 1.0).to_numpy())):
+                df_split['incident'] = 1.0
+                df_split.to_csv(file.replace('.csv', '') + '_no' + str(k) + '_bucket_incident.csv', ',', index=False)
+            else:
+                df_split.to_csv(file.replace('.csv', '') + '_no' + str(k) + '_bucket.csv', ',', index=False)
+
+    os.remove(file)
+
+
 def create_buckets(dir, target_region=None, bucket_size=22):
     for split in ['train', 'test', 'val']:
 
@@ -383,37 +405,17 @@ def create_buckets(dir, target_region=None, bucket_size=22):
                 if target_region is not None and target_region != region:
                     continue
 
-                for j, file in tqdm(enumerate(os.listdir(os.path.join(dir, split, subdir))), disable=True,
-                                    desc='loop over rides in {}'.format(region),
-                                    total=len(glob.glob(os.path.join(dir, split, subdir, 'VM2_*')))):
+                file_list = []
 
-                    if file.startswith('VM2_'):
+                root = os.path.join(dir, split, subdir)
 
-                        df = pd.read_csv(os.path.join(dir, split, subdir, file))
+                for path, sd, files in os.walk(root):
+                    for name in files:
+                        if fnmatch(name, 'VM2_*.csv'):
+                            file_list.append(os.path.join(path, name))
 
-                        length = df.shape[0]
-                        num_splits = math.floor(length / bucket_size)
-                        length_new = num_splits * bucket_size
-
-                        if num_splits >= 1:
-
-                            df_splits = np.array_split(df.iloc[:length_new, :], num_splits)
-
-                            for k, df_split in enumerate(df_splits):
-
-                                if (np.any((df_split['incident'] == 1.0).to_numpy())):
-                                    df_split['incident'] = 1.0
-                                    df_split.to_csv(os.path.join(dir, split, subdir,
-                                                                 file.replace('.csv', '') + '_no' + str(
-                                                                     k) + '_bucket_incident.csv'), ',',
-                                                    index=False)
-                                else:
-                                    df_split.to_csv(os.path.join(dir, split, subdir,
-                                                                 file.replace('.csv', '') + '_no' + str(
-                                                                     k) + '_bucket.csv'), ',',
-                                                    index=False)
-
-                        os.remove(os.path.join(dir, split, subdir, file))
+                with mp.Pool(4) as pool:
+                    pool.map(partial(create_bucket, bucket_size), file_list)
 
 
 def preprocess(dir, target_region=None, bucket_size=22):
