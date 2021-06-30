@@ -40,7 +40,7 @@ class CNN_LSTM_(tf.keras.models.Sequential):
         super().__init__()
 
     def create_model(self):
-        self.add(TimeDistributed(Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=(None, 2, 11, 20))))
+        self.add(TimeDistributed(Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=(None, 2, 11, 9))))
         self.add(TimeDistributed(Conv1D(filters=64, kernel_size=3, activation='relu')))
         self.add(TimeDistributed(Dropout(0.5)))
         self.add(TimeDistributed(MaxPooling1D(pool_size=2)))
@@ -59,7 +59,7 @@ class Conv_LSTM_(tf.keras.models.Sequential):
         super().__init__()
 
     def create_model(self):
-        self.add(ConvLSTM2D(filters=64, kernel_size=(1, 3), activation='relu', input_shape=(2, 1, 11, 20)))
+        self.add(ConvLSTM2D(filters=64, kernel_size=(1, 3), activation='relu', input_shape=(2, 1, 11, 9)))
         self.add(Dropout(0.5))
         self.add(Flatten())
         self.add(Dense(100, activation='relu'))
@@ -112,7 +112,7 @@ if __name__ == '__main__':
     dir = '../Ride_Data'
     checkpoint_dir = 'checkpoints/cnn/training'
     target_region = 'Berlin'
-    batch_size = (2 ** 12) * 22
+    batch_size = (2 ** 10) * 22
     num_epochs = 100
     patience = 5
 

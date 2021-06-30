@@ -5,23 +5,24 @@ import tensorflow as tf
 
 model = None
 
+
 def pack_features_vector(features, labels):
     """Pack the features into a single array."""
 
     features = tf.stack(list(features.values()), axis=1)
 
     if model == 'LSTM':
-        features = tf.reshape(features, (-1, 22, 20))
+        features = tf.reshape(features, (-1, 22, 9))
         labels = tf.reshape(labels, (-1, 22,))
         labels = tf.reduce_mean(labels, axis=1)
 
     if model == 'CNNLSTM':
-        features = tf.reshape(features, (-1, 2, 11, 20))
+        features = tf.reshape(features, (-1, 2, 11, 9))
         labels = tf.reshape(labels, (-1, 22,))
         labels = tf.reduce_mean(labels, axis=1)
 
     if model == 'ConvLSTM':
-        features = tf.reshape(features, (-1, 2, 1, 11, 20))
+        features = tf.reshape(features, (-1, 2, 1, 11, 9))
         labels = tf.reshape(labels, (-1, 22,))
         labels = tf.reduce_mean(labels, axis=1)
 
@@ -29,7 +30,6 @@ def pack_features_vector(features, labels):
 
 
 def load_data(dir, target_region, batch_size=22, modeln='DNN'):
-
     global model
     model = modeln
 
@@ -47,10 +47,7 @@ def load_data(dir, target_region, batch_size=22, modeln='DNN'):
         shuffle=False,
         prefetch_buffer_size=batch_size,
         num_epochs=np.trunc(neg_train_counter / pos_train_counter),
-        select_columns=['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b',
-                        'c', 'XL', 'YL', 'ZL', 'RX', 'RY', 'RZ', 'RC',
-                        'bike', 'childCheckBox', 'trailerCheckBox',
-                        'pLoc', 'incident'])
+        select_columns=['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'incident'])
 
     # non-incidents
     neg_data_train = tf.data.experimental.make_csv_dataset(
@@ -60,11 +57,7 @@ def load_data(dir, target_region, batch_size=22, modeln='DNN'):
         shuffle=False,
         prefetch_buffer_size=batch_size,
         num_epochs=1,
-        select_columns=['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b',
-                        'c', 'XL', 'YL', 'ZL', 'RX', 'RY', 'RZ',
-                        'RC',
-                        'bike', 'childCheckBox', 'trailerCheckBox',
-                        'pLoc', 'incident'])
+        select_columns=['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'incident'])
 
     # incidents
     pos_data_val = tf.data.experimental.make_csv_dataset(
@@ -74,10 +67,7 @@ def load_data(dir, target_region, batch_size=22, modeln='DNN'):
         shuffle=False,
         prefetch_buffer_size=batch_size,
         num_epochs=np.trunc(neg_val_counter / pos_val_counter),
-        select_columns=['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b',
-                        'c', 'XL', 'YL', 'ZL', 'RX', 'RY', 'RZ', 'RC',
-                        'bike', 'childCheckBox', 'trailerCheckBox',
-                        'pLoc', 'incident'])
+        select_columns=['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'incident'])
 
     # non-incidents
     neg_data_val = tf.data.experimental.make_csv_dataset(
@@ -87,11 +77,7 @@ def load_data(dir, target_region, batch_size=22, modeln='DNN'):
         shuffle=False,
         prefetch_buffer_size=batch_size,
         num_epochs=1,
-        select_columns=['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b',
-                        'c', 'XL', 'YL', 'ZL', 'RX', 'RY', 'RZ',
-                        'RC',
-                        'bike', 'childCheckBox', 'trailerCheckBox',
-                        'pLoc', 'incident'])
+        select_columns=['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'incident'])
 
     data_test = tf.data.experimental.make_csv_dataset(
         os.path.join(dir, 'test', target_region, '*.csv'),
@@ -100,9 +86,7 @@ def load_data(dir, target_region, batch_size=22, modeln='DNN'):
         shuffle=False,
         prefetch_buffer_size=batch_size,
         num_epochs=1,
-        select_columns=['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c',
-                        'XL', 'YL', 'ZL', 'RX', 'RY', 'RZ', 'RC', 'bike',
-                        'childCheckBox', 'trailerCheckBox', 'pLoc', 'incident'])
+        select_columns=['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'incident'])
 
     pos_train_ds = pos_data_train.map(pack_features_vector)
     neg_train_ds = neg_data_train.map(pack_features_vector)
