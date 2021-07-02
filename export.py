@@ -9,8 +9,11 @@ import multiprocessing as mp
 from functools import partial
 
 
-def export_file(target_dir, file):
-    region = os.path.basename(os.path.dirname(os.path.dirname(file)))
+def export_file(target_dir, split, file):
+
+    file = file[0]
+
+    region = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(file)))))
 
     arr_list = []
     with open(file) as f:
@@ -130,16 +133,6 @@ def export_file(target_dir, file):
             df.drop(['obsDistanceLeft1', 'obsDistanceLeft2', 'obsDistanceRight1', 'obsDistanceRight2',
                      'obsClosePassEvent'], 1, inplace=True)
 
-            if int(file[-1]) in [6, 7]:
-                # test set
-                split = 'test'
-            elif int(file[-1]) in [8, 9]:
-                # validation set
-                split = 'val'
-            else:
-                # train set
-                split = 'train'
-
             try:
                 os.mkdir(os.path.join(target_dir, 'train'))
                 os.mkdir(os.path.join(target_dir, 'test'))
@@ -173,8 +166,14 @@ def export(data_dir, target_dir, target_region=None):
                     if fnmatch(name, 'VM2_*'):
                         file_list.append(os.path.join(path, name))
 
+            df = pd.DataFrame(file_list)
+
+            train, val, test = np.split(df.sample(frac=1, random_state=42), [int(.6 * len(df)), int(.8 * len(df))])
+
             with mp.Pool(4) as pool:
-                pool.map(partial(export_file, target_dir), file_list)
+                pool.map(partial(export_file, target_dir, 'train'), train.values)
+                pool.map(partial(export_file, target_dir, 'val'), val.values)
+                pool.map(partial(export_file, target_dir, 'test'), test.values)
 
 
 if __name__ == '__main__':
