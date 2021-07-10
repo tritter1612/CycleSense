@@ -384,7 +384,7 @@ def create_bucket(bucket_size, file):
 
         for k, df_split in enumerate(df_splits):
 
-            if (np.any((df_split['incident'] == 1.0).to_numpy())):
+            if (np.any((df_split['incident'] >= 1.0).to_numpy())):
                 df_split['incident'] = 1.0
                 df_split.to_csv(file.replace('.csv', '') + '_no' + str(k) + '_bucket_incident.csv', ',', index=False)
             else:
