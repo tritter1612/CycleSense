@@ -43,7 +43,7 @@ def load_data(dir, target_region, batch_size=22, modeln='DNN'):
     pos_data_train = tf.data.experimental.make_csv_dataset(
         os.path.join(dir, 'train', target_region, '*_bucket_incident.csv'),
         batch_size=batch_size, label_name='incident',
-        num_parallel_reads=4,
+        num_parallel_reads=1,
         shuffle=False,
         prefetch_buffer_size=batch_size,
         num_epochs=np.trunc(neg_train_counter / pos_train_counter),
@@ -53,7 +53,7 @@ def load_data(dir, target_region, batch_size=22, modeln='DNN'):
     neg_data_train = tf.data.experimental.make_csv_dataset(
         os.path.join(dir, 'train', target_region, '*_bucket.csv'),
         batch_size=batch_size, label_name='incident',
-        num_parallel_reads=4,
+        num_parallel_reads=1,
         shuffle=False,
         prefetch_buffer_size=batch_size,
         num_epochs=1,
@@ -63,7 +63,7 @@ def load_data(dir, target_region, batch_size=22, modeln='DNN'):
     pos_data_val = tf.data.experimental.make_csv_dataset(
         os.path.join(dir, 'val', target_region, '*_bucket_incident.csv'),
         batch_size=batch_size, label_name='incident',
-        num_parallel_reads=4,
+        num_parallel_reads=1,
         shuffle=False,
         prefetch_buffer_size=batch_size,
         num_epochs=np.trunc(neg_val_counter / pos_val_counter),
@@ -73,7 +73,7 @@ def load_data(dir, target_region, batch_size=22, modeln='DNN'):
     neg_data_val = tf.data.experimental.make_csv_dataset(
         os.path.join(dir, 'val', target_region, '*_bucket.csv'),
         batch_size=batch_size, label_name='incident',
-        num_parallel_reads=4,
+        num_parallel_reads=1,
         shuffle=False,
         prefetch_buffer_size=batch_size,
         num_epochs=1,
@@ -82,7 +82,6 @@ def load_data(dir, target_region, batch_size=22, modeln='DNN'):
     data_test = tf.data.experimental.make_csv_dataset(
         os.path.join(dir, 'test', target_region, '*.csv'),
         batch_size=batch_size, label_name='incident',
-        num_parallel_reads=4,
         shuffle=False,
         prefetch_buffer_size=batch_size,
         num_epochs=1,
