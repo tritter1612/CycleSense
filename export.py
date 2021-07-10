@@ -65,11 +65,13 @@ def export_file(target_dir, split, file):
                         incident_info_list.append(incident_info_tuple)
 
             for k, line in enumerate(ride_info_lines):
+
+                # k == 0 is empty and k == 1 is the system_no
                 if k == 2:
                     header = line
                 if k > 2:
 
-                    device_os = 1 if 'i' in system_no else 0
+                    line_arr = None
 
                     for t in incident_info_list:
                         incident_lat = t[1]
@@ -104,18 +106,18 @@ def export_file(target_dir, split, file):
                                     i7) + ',' + str(i8) + ',' + str(i9) + ',' + str(i10) + ',' + str(
                                     scary)), delimiter=',')
 
-                        else:
-                            incident = 0 if incident != -5 else -5
-
-                    i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, scary = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-                    line_arr = np.genfromtxt(
-                        StringIO(line + ',' + str(
-                            bike) + ',' + str(childCheckBox) + ',' + str(
-                            trailerCheckBox) + ',' + str(pLoc) + ',' + str(
-                            incident) + ',' + str(i1) + ',' + str(i2) + ',' + str(
-                            i3) + ',' + str(i4) + ',' + str(i5) + ',' + str(i6) + ',' + str(
-                            i7) + ',' + str(i8) + ',' + str(i9) + ',' + str(i10) + ',' + str(
-                            scary)), delimiter=',')
+                    # if there was no fitting incident in the line (incident_ts != ts)
+                    if line_arr is None:
+                        incident = 0
+                        i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, scary = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+                        line_arr = np.genfromtxt(
+                            StringIO(line + ',' + str(
+                                bike) + ',' + str(childCheckBox) + ',' + str(
+                                trailerCheckBox) + ',' + str(pLoc) + ',' + str(
+                                incident) + ',' + str(i1) + ',' + str(i2) + ',' + str(
+                                i3) + ',' + str(i4) + ',' + str(i5) + ',' + str(i6) + ',' + str(
+                                i7) + ',' + str(i8) + ',' + str(i9) + ',' + str(i10) + ',' + str(
+                                scary)), delimiter=',')
 
                     arr_list.append(line_arr)
 
@@ -149,31 +151,33 @@ def export_file(target_dir, split, file):
 
 
 def export(data_dir, target_dir, target_region=None):
-    for i, subdir in tqdm(enumerate(os.listdir(data_dir)), desc='loop over regions',
-                          total=len(glob.glob(os.path.join(data_dir, '*')))):
-        if not subdir.startswith('.'):
-            region = subdir
+    for subdir in tqdm(glob.glob(os.path.join(data_dir, '[!.]*'))):
+        region = subdir
 
-            if target_region is not None and target_region != region:
-                continue
+        if target_region is not None and target_region != region:
+            continue
 
-            file_list = []
+        file_list = []
+        file_names = []
 
-            root = os.path.join(data_dir, subdir, 'Rides')
+        root = os.path.join(data_dir, subdir, 'Rides')
 
-            for path, sd, files in os.walk(root):
-                for name in files:
-                    if fnmatch(name, 'VM2_*'):
+        for path, sd, files in os.walk(root):
+            for name in files:
+                if fnmatch(name, 'VM2_*'):
+
+                    if name not in file_names:
                         file_list.append(os.path.join(path, name))
+                        file_names.append(name)
 
-            df = pd.DataFrame(file_list)
+        df = pd.DataFrame(file_list)
 
-            train, val, test = np.split(df.sample(frac=1, random_state=42), [int(.6 * len(df)), int(.8 * len(df))])
+        train, val, test = np.split(df.sample(frac=1, random_state=42), [int(.6 * len(df)), int(.8 * len(df))])
 
-            with mp.Pool(4) as pool:
-                pool.map(partial(export_file, target_dir, 'train'), train.values)
-                pool.map(partial(export_file, target_dir, 'val'), val.values)
-                pool.map(partial(export_file, target_dir, 'test'), test.values)
+        with mp.Pool(4) as pool:
+            pool.map(partial(export_file, target_dir, 'train'), train.values)
+            pool.map(partial(export_file, target_dir, 'val'), val.values)
+            pool.map(partial(export_file, target_dir, 'test'), test.values)
 
 
 if __name__ == '__main__':
