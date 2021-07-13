@@ -14,34 +14,27 @@ from functools import partial
 def remove_invalid_rides(dir, target_region=None):
     for split in ['train', 'test', 'val']:
 
-        for i, subdir in tqdm(enumerate(os.listdir(os.path.join(dir, split))),
-                              desc='remove invalid rides in {} data'.format(split),
-                              total=len(glob.glob(os.path.join(dir, split, '*')))):
-            if not subdir.startswith('.'):
-                region = subdir
+        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
+                           desc='remove invalid rides in {} data'.format(split)):
+            region = os.path.basename(subdir)
 
-                if target_region is not None and target_region != region:
-                    continue
+            if target_region is not None and target_region != region:
+                continue
 
-                for j, file in tqdm(enumerate(os.listdir(os.path.join(dir, split, subdir))), disable=True,
-                                    desc='loop over rides in {}'.format(region),
-                                    total=len(glob.glob(os.path.join(dir, split, subdir, 'VM2_*')))):
+            for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
 
-                    if file.startswith('VM2_'):
+                df = pd.read_csv(file)
 
-                        df = pd.read_csv(os.path.join(dir, split, subdir, file))
+                df_cp = df.copy(deep=True)
+                df_cp['timeStamp'] = df_cp['timeStamp'].diff()
 
-                        df_cp = df.copy(deep=True)
-                        df_cp['timeStamp'] = df_cp['timeStamp'].diff()
+                breakpoints = np.where((df_cp['timeStamp'] > 6000).to_numpy())
 
-                        breakpoints = np.where((df_cp['timeStamp'] > 6000).to_numpy())
+                df_cp.dropna(inplace=True, axis=0)
 
-                        df_cp.dropna(inplace=True, axis=0)
-
-                        if len(df_cp) == 0 or len(breakpoints[0]) > 0:
-                            # remove rides where one col is completely empty or timestamp interval is too long
-                            # print(os.path.join(dir, split, subdir, file))
-                            os.remove(os.path.join(dir, split, subdir, file))
+                if len(df_cp) == 0 or len(breakpoints[0]) > 0:
+                    # remove rides where one col is completely empty or timestamp interval is too long
+                    os.remove(file)
 
 
 def replace_outlier_file(lower, upper, file):
@@ -67,25 +60,23 @@ def remove_acc_outliers(dir, target_region=None):
     l = []
     split = 'train'
 
-    for i, subdir in enumerate(os.listdir(os.path.join(dir, split))):
-        if not subdir.startswith('.'):
-            region = subdir
+    for subdir in glob.glob(os.path.join(dir, split, '[!.]*')):
 
-            if target_region is not None and target_region != region:
-                continue
+        region = os.path.basename(subdir)
 
-            for j, file in tqdm(enumerate(os.listdir(os.path.join(dir, split, subdir))), disable=True,
-                                desc='loop over rides in {}'.format(region),
-                                total=len(glob.glob(os.path.join(dir, split, subdir, 'VM2_*')))):
-                df = pd.read_csv(os.path.join(dir, split, subdir, file))
+        if target_region is not None and target_region != region:
+            continue
 
-                df = df.dropna()
+        for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
+            df = pd.read_csv(file)
 
-                if df.shape[0] == 0:
-                    os.remove(os.path.join(dir, split, subdir, file))
+            df = df.dropna()
 
-                else:
-                    l.append(df[['acc']].to_numpy())
+            if df.shape[0] == 0:
+                os.remove(file)
+
+            else:
+                l.append(df[['acc']].to_numpy())
 
     arr = np.concatenate(l, axis=0)
     print('data max: {}'.format(np.max(arr, axis=0)))
@@ -102,133 +93,114 @@ def remove_acc_outliers(dir, target_region=None):
 
     for split in ['train', 'test', 'val']:
 
-        for i, subdir in tqdm(enumerate(os.listdir(os.path.join(dir, split))),
-                              desc='remove accuracy outliers from {} data'.format(split),
-                              total=len(glob.glob(os.path.join(dir, split, '*')))):
-            if not subdir.startswith('.'):
-                region = subdir
+        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
+                           desc='remove accuracy outliers from {} data'.format(split)):
+            region = os.path.basename(subdir)
 
-                if target_region is not None and target_region != region:
-                    continue
+            if target_region is not None and target_region != region:
+                continue
 
-                file_list = []
+            file_list = []
 
-                root = os.path.join(dir, split, subdir)
+            root = subdir
 
-                for path, sd, files in os.walk(root):
-                    for name in files:
-                        if fnmatch(name, 'VM2_*.csv'):
-                            file_list.append(os.path.join(path, name))
+            for path, sd, files in os.walk(root):
+                for name in files:
+                    if fnmatch(name, 'VM2_*.csv'):
+                        file_list.append(os.path.join(path, name))
 
-                with mp.Pool(4) as pool:
-                    pool.map(partial(replace_outlier_file, lower, upper), file_list)
+            with mp.Pool(4) as pool:
+                pool.map(partial(replace_outlier_file, lower, upper), file_list)
 
 
 def calc_vel_delta(dir, target_region=None):
     for split in ['train', 'test', 'val']:
 
-        for i, subdir in tqdm(enumerate(os.listdir(os.path.join(dir, split))),
-                              desc='calculate vel delta on {} data'.format(split),
-                              total=len(glob.glob(os.path.join(dir, split, '*')))):
-            if not subdir.startswith('.'):
-                region = subdir
+        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
+                           desc='calculate vel delta on {} data'.format(split)):
+            region = os.path.basename(subdir)
 
-                if target_region is not None and target_region != region:
-                    continue
+            if target_region is not None and target_region != region:
+                continue
 
-                for j, file in tqdm(enumerate(os.listdir(os.path.join(dir, split, subdir))), disable=True,
-                                    desc='loop over rides in {}'.format(region),
-                                    total=len(glob.glob(os.path.join(dir, split, subdir, 'VM2_*')))):
+            for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
+                df = pd.read_csv(file)
 
-                    if file.startswith('VM2_'):
-                        df = pd.read_csv(os.path.join(dir, split, subdir, file))
+                df_cp = df.copy(deep=True)
 
-                        df_cp = df.copy(deep=True)
+                df_cp = df_cp.dropna()
+                df_cp[['lat', 'lon', 'timeStamp']] = df_cp[['lat', 'lon', 'timeStamp']].diff()
+                df_cp = df_cp.dropna()
 
-                        df_cp = df_cp.dropna()
-                        df_cp[['lat', 'lon', 'timeStamp']] = df_cp[['lat', 'lon', 'timeStamp']].diff()
-                        df_cp = df_cp.dropna()
+                # compute lat & lon change per second
+                df_cp['lat'] = df_cp['lat'] * 1000 / df_cp['timeStamp']
+                df_cp['lon'] = df_cp['lon'] * 1000 / df_cp['timeStamp']
 
-                        # compute lat & lon change per second
-                        df_cp['lat'] = df_cp['lat'] * 1000 / df_cp['timeStamp']
-                        df_cp['lon'] = df_cp['lon'] * 1000 / df_cp['timeStamp']
+                df[['lat', 'lon']] = df_cp[['lat', 'lon']]
 
-                        df[['lat', 'lon']] = df_cp[['lat', 'lon']]
-
-                        df.to_csv(os.path.join(dir, split, subdir, file), ',', index=False)
+                df.to_csv(file, ',', index=False)
 
 
 def linear_interpolate(dir, target_region=None):
     for split in ['train', 'test', 'val']:
 
-        for i, subdir in tqdm(enumerate(os.listdir(os.path.join(dir, split))),
-                              desc='apply linear interpolation on {} data'.format(split),
-                              total=len(glob.glob(os.path.join(dir, split, '*')))):
-            if not subdir.startswith('.'):
-                region = subdir
+        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
+                           desc='apply linear interpolation on {} data'.format(split)):
+            region = os.path.basename(subdir)
 
-                if target_region is not None and target_region != region:
-                    continue
+            if target_region is not None and target_region != region:
+                continue
 
-                for j, file in tqdm(enumerate(os.listdir(os.path.join(dir, split, subdir))), disable=True,
-                                    desc='loop over rides in {}'.format(region),
-                                    total=len(glob.glob(os.path.join(dir, split, subdir, 'VM2_*')))):
+            for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
+                df = pd.read_csv(file)
 
-                    if file.startswith('VM2_'):
-                        df = pd.read_csv(os.path.join(dir, split, subdir, file))
+                # convert timestamp to datetime format
+                df['timeStamp'] = df['timeStamp'].apply(
+                    lambda x: dt.datetime.utcfromtimestamp(x / 1000).isoformat())
 
-                        # convert timestamp to datetime format
-                        df['timeStamp'] = df['timeStamp'].apply(
-                            lambda x: dt.datetime.utcfromtimestamp(x / 1000).isoformat())
+                # set timeStamp col as pandas datetime index
+                df['timeStamp'] = pd.to_datetime(df['timeStamp'])
 
-                        # set timeStamp col as pandas datetime index
-                        df['timeStamp'] = pd.to_datetime(df['timeStamp'])
+                df = df.set_index(pd.DatetimeIndex(df['timeStamp']))
 
-                        df = df.set_index(pd.DatetimeIndex(df['timeStamp']))
+                # drop all duplicate occurrences of the labels and keep the first occurrence
+                df = df[~df.index.duplicated(keep='first')]
 
-                        # drop all duplicate occurrences of the labels and keep the first occurrence
-                        df = df[~df.index.duplicated(keep='first')]
+                # interpolation of acc via linear interpolation based on timestamp
+                df['acc'].interpolate(method='time', inplace=True)
 
-                        # interpolation of acc via linear interpolation based on timestamp
-                        df['acc'].interpolate(method='time', inplace=True)
+                df.sort_index(axis=0, ascending=False, inplace=True)
 
-                        df.sort_index(axis=0, ascending=False, inplace=True)
+                # interpolation of missing values via padding on the reversed df
+                df['lat'].interpolate(method='pad', inplace=True)
+                df['lon'].interpolate(method='pad', inplace=True)
 
-                        # interpolation of missing values via padding on the reversed df
-                        df['lat'].interpolate(method='pad', inplace=True)
-                        df['lon'].interpolate(method='pad', inplace=True)
+                df.sort_index(axis=0, ascending=True, inplace=True)
 
-                        df.sort_index(axis=0, ascending=True, inplace=True)
-
-                        df.to_csv(os.path.join(dir, split, subdir, file), ',', index=False)
+                df.to_csv(file, ',', index=False)
 
 
 def remove_vel_outliers(dir, target_region=None):
     l = []
     split = 'train'
 
-    for i, subdir in enumerate(os.listdir(os.path.join(dir, split))):
-        if not subdir.startswith('.'):
-            region = subdir
+    for subdir in glob.glob(os.path.join(dir, split, '[!.]*')):
+        region = os.path.basename(subdir)
 
-            if target_region is not None and target_region != region:
-                continue
+        if target_region is not None and target_region != region:
+            continue
 
-            for j, file in tqdm(enumerate(os.listdir(os.path.join(dir, split, subdir))), disable=True,
-                                desc='loop over rides in {}'.format(region),
-                                total=len(glob.glob(os.path.join(dir, split, subdir, 'VM2_*')))):
+        for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
 
-                if file.startswith('VM2_'):
+            df = pd.read_csv(file)
 
-                    df = pd.read_csv(os.path.join(dir, split, subdir, file))
+            df = df.dropna()
 
-                    df = df.dropna()
+            if df.shape[0] == 0:
+                os.remove(file)
 
-                    if df.shape[0] == 0:
-                        os.remove(os.path.join(dir, split, subdir, file))
-
-                    else:
-                        l.append(df[['lat', 'lon']].to_numpy())
+            else:
+                l.append(df[['lat', 'lon']].to_numpy())
 
     arr = np.concatenate(l, axis=0)
 
@@ -246,56 +218,50 @@ def remove_vel_outliers(dir, target_region=None):
 
     for split in ['train', 'test', 'val']:
 
-        for i, subdir in tqdm(enumerate(os.listdir(os.path.join(dir, split))),
-                              desc='remove velocity outliers from {} data'.format(split),
-                              total=len(glob.glob(os.path.join(dir, split, '*')))):
-            if not subdir.startswith('.'):
-                region = subdir
+        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
+                           desc='remove velocity outliers from {} data'.format(split)):
+            region = os.path.basename(subdir)
 
-                if target_region is not None and target_region != region:
-                    continue
+            if target_region is not None and target_region != region:
+                continue
 
-                for j, file in enumerate(os.listdir(os.path.join(dir, split, subdir))):
+            for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
 
-                    if file.startswith('VM2_'):
-                        df = pd.read_csv(os.path.join(dir, split, subdir, file))
+                df = pd.read_csv(file)
 
-                        arr = df[['lat', 'lon']].to_numpy()
+                arr = df[['lat', 'lon']].to_numpy()
 
-                        outliers_lower = arr < lower
-                        outliers_upper = arr > upper
+                outliers_lower = arr < lower
+                outliers_upper = arr > upper
 
-                        outliers = np.logical_or(outliers_lower, outliers_upper)
-                        outliers_bool = np.any(outliers, axis=1)
-                        outlier_rows = np.where(outliers_bool)[0]
+                outliers = np.logical_or(outliers_lower, outliers_upper)
+                outliers_bool = np.any(outliers, axis=1)
+                outlier_rows = np.where(outliers_bool)[0]
 
-                        if len(outlier_rows) > 0:
-                            df = df.drop(outlier_rows)
-                            df.to_csv(os.path.join(dir, split, subdir, file), ',', index=False)
+                if len(outlier_rows) > 0:
+                    df = df.drop(outlier_rows)
+                    df.to_csv(file, ',', index=False)
 
 
 def remove_empty_rows(dir, target_region=None):
     for split in ['train', 'test', 'val']:
 
-        for i, subdir in tqdm(enumerate(os.listdir(os.path.join(dir, split))),
-                              desc='remove empty rows in {} data'.format(split),
-                              total=len(glob.glob(os.path.join(dir, split, '*')))):
-            if not subdir.startswith('.'):
-                region = subdir
+        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
+                           desc='remove empty rows in {} data'.format(split)):
+            region = os.path.basename(subdir)
 
-                if target_region is not None and target_region != region:
-                    continue
+            if target_region is not None and target_region != region:
+                continue
 
-                for j, file in enumerate(os.listdir(os.path.join(dir, split, subdir))):
+            for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
 
-                    if file.startswith('VM2_'):
-                        df = pd.read_csv(os.path.join(dir, split, subdir, file))
-                        df.dropna(inplace=True, axis=0)
+                df = pd.read_csv(file)
+                df.dropna(inplace=True, axis=0)
 
-                        if len(df) != 0:
-                            df.to_csv(os.path.join(dir, split, subdir, file), ',', index=False)
-                        else:
-                            os.remove(os.path.join(dir, split, subdir, file))
+                if len(df) != 0:
+                    df.to_csv(file, ',', index=False)
+                else:
+                    os.remove(file)
 
 
 def getRotationMatrixFromVector(RX, RY, RZ, RC):
@@ -324,51 +290,70 @@ def getRotationMatrixFromVector(RX, RY, RZ, RC):
     return R
 
 
+def rotateRideVectors(file):
+    arr = np.genfromtxt(file, delimiter=',', skip_header=True)
+
+    for i in range(arr.shape[0]):
+        R = getRotationMatrixFromVector(arr[i, 13], arr[i, 14], arr[i, 15], arr[i, 16])
+        XYZ = np.matmul(R.T, np.array([arr[i, 2], arr[i, 3], arr[i, 4]]))
+        XLYLZL = np.matmul(R.T, np.array([arr[i, 10], arr[i, 11], arr[i, 12]]))
+
+        arr[i, [[2, 3, 4, 10, 11, 12]]] = [XYZ[0], XYZ[1], XYZ[2], XLYLZL[0], XLYLZL[1], XLYLZL[2]]
+
+    np.savetxt(file, arr, delimiter=',',
+               header='lat,lon,X,Y,Z,timeStamp,acc,a,b,c,XL,YL,ZL,RX,RY,RZ,RC,bike,childCheckBox,trailerCheckBox,pLoc,incident,i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,scary')
+
+
+def rotateRides(dir, target_region=None):
+    for split in ['train', 'test', 'val']:
+
+        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
+                           desc='rotate rides in {} data'.format(split)):
+            region = os.path.basename(subdir)
+
+            if target_region is not None and target_region != region:
+                continue
+
+            file_list = glob.glob(os.path.join(subdir, 'VM2_*.csv'))
+
+            with mp.Pool(4) as pool:
+                pool.map(rotateRideVectors, file_list)
+
+
 def scale(dir, target_region=None):
     scaler_maxabs = MaxAbsScaler()
 
     split = 'train'
 
-    for i, subdir in tqdm(enumerate(os.listdir(os.path.join(dir, split))), desc='fit scaler',
-                          total=len(glob.glob(os.path.join(dir, split, '*')))):
-        if not subdir.startswith('.'):
-            region = subdir
+    for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
+                       desc='fit scaler'):
+        region = os.path.basename(subdir)
+
+        if target_region is not None and target_region != region:
+            continue
+
+        for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
+            df = pd.read_csv(file)
+
+            df.fillna(0, inplace=True)
+
+            scaler_maxabs.partial_fit(df[['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'XL', 'YL', 'ZL']])
+
+    for split in ['train', 'test', 'val']:
+
+        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')), desc='scale {} data'.format(split)):
+            region = os.path.basename(subdir)
 
             if target_region is not None and target_region != region:
                 continue
 
-            for j, file in tqdm(enumerate(os.listdir(os.path.join(dir, split, subdir))), disable=True,
-                                desc='loop over rides in {}'.format(region),
-                                total=len(glob.glob(os.path.join(dir, split, subdir, 'VM2_*')))):
+            for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
+                df = pd.read_csv(file)
+                df[['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'XL', 'YL',
+                    'ZL']] = scaler_maxabs.transform(
+                    df[['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'XL', 'YL', 'ZL']])
 
-                if file.startswith('VM2_'):
-                    df = pd.read_csv(os.path.join(dir, split, subdir, file))
-
-                    df.fillna(0, inplace=True)
-
-                    scaler_maxabs.partial_fit(df[['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'XL', 'YL', 'ZL']])
-
-    for split in ['train', 'test', 'val']:
-
-        for i, subdir in tqdm(enumerate(os.listdir(os.path.join(dir, split))), desc='scale {} data'.format(split),
-                              total=len(glob.glob(os.path.join(dir, split, '*')))):
-            if not subdir.startswith('.'):
-                region = subdir
-
-                if target_region is not None and target_region != region:
-                    continue
-
-                for j, file in tqdm(enumerate(os.listdir(os.path.join(dir, split, subdir))), disable=True,
-                                    desc='loop over rides in {}'.format(region),
-                                    total=len(glob.glob(os.path.join(dir, split, subdir, 'VM2_*')))):
-
-                    if file.startswith('VM2_'):
-                        df = pd.read_csv(os.path.join(dir, split, subdir, file))
-                        df[['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'XL', 'YL',
-                            'ZL']] = scaler_maxabs.transform(
-                            df[['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'XL', 'YL', 'ZL']])
-
-                        df.to_csv(os.path.join(dir, split, subdir, file), ',', index=False)
+                df.to_csv(file, ',', index=False)
 
 
 def create_bucket(bucket_size, file):
@@ -396,26 +381,24 @@ def create_bucket(bucket_size, file):
 def create_buckets(dir, target_region=None, bucket_size=22):
     for split in ['train', 'test', 'val']:
 
-        for i, subdir in tqdm(enumerate(os.listdir(os.path.join(dir, split))),
-                              desc='generate buckets for {} data'.format(split),
-                              total=len(glob.glob(os.path.join(dir, split, '*')))):
-            if not subdir.startswith('.'):
-                region = subdir
+        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
+                           desc='generate buckets for {} data'.format(split)):
+            region = os.path.basename(subdir)
 
-                if target_region is not None and target_region != region:
-                    continue
+            if target_region is not None and target_region != region:
+                continue
 
-                file_list = []
+            file_list = []
 
-                root = os.path.join(dir, split, subdir)
+            root = subdir
 
-                for path, sd, files in os.walk(root):
-                    for name in files:
-                        if fnmatch(name, 'VM2_*.csv'):
-                            file_list.append(os.path.join(path, name))
+            for path, sd, files in os.walk(root):
+                for name in files:
+                    if fnmatch(name, 'VM2_*.csv'):
+                        file_list.append(os.path.join(path, name))
 
-                with mp.Pool(4) as pool:
-                    pool.map(partial(create_bucket, bucket_size), file_list)
+            with mp.Pool(4) as pool:
+                pool.map(partial(create_bucket, bucket_size), file_list)
 
 
 def preprocess(dir, target_region=None, bucket_size=22):
@@ -425,7 +408,7 @@ def preprocess(dir, target_region=None, bucket_size=22):
     linear_interpolate(dir, target_region)
     remove_vel_outliers(dir, target_region)
     remove_empty_rows(dir, target_region)
-    # TODO: add vector rotation
+    rotateRides(dir, target_region)
     scale(dir, target_region)
     create_buckets(dir, target_region, bucket_size)
 
