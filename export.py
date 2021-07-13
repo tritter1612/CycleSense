@@ -152,7 +152,7 @@ def export_file(target_dir, split, file):
 
 def export(data_dir, target_dir, target_region=None):
     for subdir in tqdm(glob.glob(os.path.join(data_dir, '[!.]*'))):
-        region = subdir
+        region = os.path.basename(subdir)
 
         if target_region is not None and target_region != region:
             continue
