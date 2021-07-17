@@ -156,10 +156,10 @@ def linear_interpolate(dir, target_region=None):
 
                 # convert timestamp to datetime format
                 df['timeStamp'] = df['timeStamp'].apply(
-                    lambda x: dt.datetime.utcfromtimestamp(x / 1000).isoformat())
+                    lambda x: dt.datetime.utcfromtimestamp(x / 1000))
 
                 # set timeStamp col as pandas datetime index
-                df['timeStamp'] = pd.to_datetime(df['timeStamp'])
+                df['timeStamp'] = pd.to_datetime(df['timeStamp'], unit='ns')
 
                 df = df.set_index(pd.DatetimeIndex(df['timeStamp']))
 
@@ -176,6 +176,8 @@ def linear_interpolate(dir, target_region=None):
                 df['lon'].interpolate(method='pad', inplace=True)
 
                 df.sort_index(axis=0, ascending=True, inplace=True)
+
+                df['timeStamp'] = df.index.astype(np.int64)
 
                 df.to_csv(file, ',', index=False)
 
