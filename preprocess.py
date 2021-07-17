@@ -296,12 +296,14 @@ def rotateRideVectors(file):
     for i in range(arr.shape[0]):
         R = getRotationMatrixFromVector(arr[i, 13], arr[i, 14], arr[i, 15], arr[i, 16])
         XYZ = np.matmul(R.T, np.array([arr[i, 2], arr[i, 3], arr[i, 4]]))
+        abc = np.matmul(R.T, np.array([arr[i, 7], arr[i, 8], arr[i, 9]]))
         XLYLZL = np.matmul(R.T, np.array([arr[i, 10], arr[i, 11], arr[i, 12]]))
 
-        arr[i, [[2, 3, 4, 10, 11, 12]]] = [XYZ[0], XYZ[1], XYZ[2], XLYLZL[0], XLYLZL[1], XLYLZL[2]]
+        arr[i, [[2, 3, 4, 7, 8, 9, 10, 11, 12]]] = [XYZ[0], XYZ[1], XYZ[2], abc[0], abc[1], abc[2], XLYLZL[0], XLYLZL[1], XLYLZL[2]]
 
     np.savetxt(file, arr, delimiter=',',
-               header='lat,lon,X,Y,Z,timeStamp,acc,a,b,c,XL,YL,ZL,RX,RY,RZ,RC,bike,childCheckBox,trailerCheckBox,pLoc,incident,i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,scary')
+               header='lat,lon,X,Y,Z,timeStamp,acc,a,b,c,XL,YL,ZL,RX,RY,RZ,RC,bike,childCheckBox,trailerCheckBox,pLoc,incident,i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,scary',
+               comments='')
 
 
 def rotateRides(dir, target_region=None):
@@ -339,6 +341,8 @@ def scale(dir, target_region=None):
 
             scaler_maxabs.partial_fit(df[['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'XL', 'YL', 'ZL']])
 
+    print(scaler_maxabs.max_abs_)
+
     for split in ['train', 'test', 'val']:
 
         for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')), desc='scale {} data'.format(split)):
@@ -373,6 +377,7 @@ def create_bucket(bucket_size, file):
                 df_split['incident'] = 1.0
                 df_split.to_csv(file.replace('.csv', '') + '_no' + str(k) + '_bucket_incident.csv', ',', index=False)
             else:
+                df_split['incident'] = 0.0
                 df_split.to_csv(file.replace('.csv', '') + '_no' + str(k) + '_bucket.csv', ',', index=False)
 
     os.remove(file)
