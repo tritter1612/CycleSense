@@ -141,6 +141,22 @@ def calc_vel_delta(dir, target_region=None):
                 df.to_csv(file, ',', index=False)
 
 
+def rotateRides(dir, target_region=None):
+    for split in ['train', 'test', 'val']:
+
+        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
+                           desc='rotate rides in {} data'.format(split)):
+            region = os.path.basename(subdir)
+
+            if target_region is not None and target_region != region:
+                continue
+
+            file_list = glob.glob(os.path.join(subdir, 'VM2_*.csv'))
+
+            with mp.Pool(4) as pool:
+                pool.map(rotateRideVectors, file_list)
+
+
 def linear_interpolate(dir, target_region=None):
     for split in ['train', 'test', 'val']:
 
@@ -308,22 +324,6 @@ def rotateRideVectors(file):
                comments='')
 
 
-def rotateRides(dir, target_region=None):
-    for split in ['train', 'test', 'val']:
-
-        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
-                           desc='rotate rides in {} data'.format(split)):
-            region = os.path.basename(subdir)
-
-            if target_region is not None and target_region != region:
-                continue
-
-            file_list = glob.glob(os.path.join(subdir, 'VM2_*.csv'))
-
-            with mp.Pool(4) as pool:
-                pool.map(rotateRideVectors, file_list)
-
-
 def scale(dir, target_region=None):
     scaler_maxabs = MaxAbsScaler()
 
@@ -412,10 +412,10 @@ def preprocess(dir, target_region=None, bucket_size=22):
     remove_invalid_rides(dir, target_region)
     remove_acc_outliers(dir, target_region)
     calc_vel_delta(dir, target_region)
+    rotateRides(dir, target_region)
     linear_interpolate(dir, target_region)
     remove_vel_outliers(dir, target_region)
     remove_empty_rows(dir, target_region)
-    rotateRides(dir, target_region)
     scale(dir, target_region)
     create_buckets(dir, target_region, bucket_size)
 
