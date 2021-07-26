@@ -106,6 +106,9 @@ def export_file(target_dir, split, file):
                                     i7) + ',' + str(i8) + ',' + str(i9) + ',' + str(i10) + ',' + str(
                                     scary)), delimiter=',')
 
+                            # remove t incident from incident_info_list
+                            incident_info_list.remove(t)
+
                     # if there was no fitting incident in the line (incident_ts != ts)
                     if line_arr is None:
                         incident = 0
@@ -123,6 +126,12 @@ def export_file(target_dir, split, file):
 
             try:
                 arr = np.stack(arr_list)
+                # check if incident_info_list is empty, print warning if not, as incident will be lost
+                if len(incident_info_list) != 0:
+                    for t in incident_info_list:
+                        if int(t[8]) != -5:
+                            print('WARNING: Incident with timestamp ' + t[
+                                3] + ' not assigned to a ride_info_line in file ' + file)
 
             except:
                 print('file {} has the wrong format'.format(file))
@@ -158,7 +167,7 @@ def export(data_dir, target_dir, target_region=None):
             continue
 
         file_list = []
-        file_names = []
+        file_names = set()
 
         root = os.path.join(data_dir, subdir, 'Rides')
 
@@ -168,7 +177,7 @@ def export(data_dir, target_dir, target_region=None):
 
                     if name not in file_names:
                         file_list.append(os.path.join(path, name))
-                        file_names.append(name)
+                        file_names.add(name)
 
         df = pd.DataFrame(file_list)
 
@@ -178,6 +187,12 @@ def export(data_dir, target_dir, target_region=None):
             pool.map(partial(export_file, target_dir, 'train'), train.values)
             pool.map(partial(export_file, target_dir, 'val'), val.values)
             pool.map(partial(export_file, target_dir, 'test'), test.values)
+
+        for split in ['train', 'test', 'val']:
+            count = 0
+            for subdir in tqdm(glob.glob(os.path.join(target_dir, split, '[!.]*')), desc='remove invalid rides in {} data'.format(split)):
+                count += len(glob.glob(os.path.join(subdir, 'VM2_*.csv')))
+            print('number of rides in {}: {}'.format(split, count))
 
 
 if __name__ == '__main__':
