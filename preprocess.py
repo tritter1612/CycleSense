@@ -421,7 +421,7 @@ def create_buckets(dir, target_region=None, bucket_size=22):
                 pool.map(partial(create_buckets_inner, bucket_size), file_list)
 
 
-def preprocess(dir, target_region=None, bucket_size=22):
+def preprocess(dir, target_region=None, bucket_size=44):
     remove_unnecessary_cols(dir, target_region)
     remove_invalid_rides(dir, target_region)
     remove_acc_outliers(dir, target_region)
@@ -437,5 +437,5 @@ def preprocess(dir, target_region=None, bucket_size=22):
 if __name__ == '__main__':
     dir = '../Ride_Data'
     target_region = None
-    bucket_size = 22
+    bucket_size = 44
     preprocess(dir, target_region, bucket_size)
