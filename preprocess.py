@@ -11,6 +11,32 @@ import math
 from functools import partial
 
 
+def remove_unnecessary_cols_inner(file):
+    df = pd.read_csv(file)
+
+    # drop columns which are no longer needed
+    df.drop(columns=['bike', 'childCheckBox', 'trailerCheckBox', 'pLoc', 'i1', 'i2', 'i3', 'i4', 'i5', 'i6', 'i7', 'i8',
+                     'i9', 'i10', 'scary'], inplace=True)
+
+    df.to_csv(file, ',', index=False)
+
+
+def remove_unnecessary_cols(dir, target_region=None):
+    for split in ['train', 'test', 'val']:
+
+        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
+                           desc='remove unnecessary cols in {} data'.format(split)):
+            region = os.path.basename(subdir)
+
+            if target_region is not None and target_region != region:
+                continue
+
+            file_list = glob.glob(os.path.join(subdir, 'VM2_*.csv'))
+
+            with mp.Pool(4) as pool:
+                pool.map(remove_unnecessary_cols_inner, file_list)
+
+
 def remove_invalid_rides(dir, target_region=None):
     for split in ['train', 'test', 'val']:
 
@@ -37,7 +63,7 @@ def remove_invalid_rides(dir, target_region=None):
                     os.remove(file)
 
 
-def replace_outlier_file(lower, upper, file):
+def remove_acc_outliers_inner(lower, upper, file):
     df = pd.read_csv(file)
     arr = df[['acc']].to_numpy()
 
@@ -100,17 +126,10 @@ def remove_acc_outliers(dir, target_region=None):
             if target_region is not None and target_region != region:
                 continue
 
-            file_list = []
-
-            root = subdir
-
-            for path, sd, files in os.walk(root):
-                for name in files:
-                    if fnmatch(name, 'VM2_*.csv'):
-                        file_list.append(os.path.join(path, name))
+            file_list = glob.glob(os.path.join(subdir, 'VM2_*.csv'))
 
             with mp.Pool(4) as pool:
-                pool.map(partial(replace_outlier_file, lower, upper), file_list)
+                pool.map(partial(remove_acc_outliers_inner, lower, upper), file_list)
 
 
 def calc_vel_delta(dir, target_region=None):
@@ -141,6 +160,23 @@ def calc_vel_delta(dir, target_region=None):
                 df.to_csv(file, ',', index=False)
 
 
+def rotateRides_inner(file):
+    arr = np.genfromtxt(file, delimiter=',', skip_header=True)
+
+    for i in range(arr.shape[0]):
+        R = getRotationMatrixFromVector(arr[i, 13], arr[i, 14], arr[i, 15], arr[i, 16])
+        XYZ = np.matmul(R.T, np.array([arr[i, 2], arr[i, 3], arr[i, 4]]))
+        abc = np.matmul(R.T, np.array([arr[i, 7], arr[i, 8], arr[i, 9]]))
+        XLYLZL = np.matmul(R.T, np.array([arr[i, 10], arr[i, 11], arr[i, 12]]))
+
+        arr[i, [[2, 3, 4, 7, 8, 9, 10, 11, 12]]] = [XYZ[0], XYZ[1], XYZ[2], abc[0], abc[1], abc[2], XLYLZL[0],
+                                                    XLYLZL[1], XLYLZL[2]]
+
+    np.savetxt(file, arr, delimiter=',',
+               header='lat,lon,X,Y,Z,timeStamp,acc,a,b,c,XL,YL,ZL,RX,RY,RZ,RC,incident',
+               comments='')
+
+
 def rotateRides(dir, target_region=None):
     for split in ['train', 'test', 'val']:
 
@@ -154,7 +190,7 @@ def rotateRides(dir, target_region=None):
             file_list = glob.glob(os.path.join(subdir, 'VM2_*.csv'))
 
             with mp.Pool(4) as pool:
-                pool.map(rotateRideVectors, file_list)
+                pool.map(rotateRides_inner, file_list)
 
 
 def linear_interpolate(dir, target_region=None):
@@ -308,22 +344,6 @@ def getRotationMatrixFromVector(RX, RY, RZ, RC):
     return R
 
 
-def rotateRideVectors(file):
-    arr = np.genfromtxt(file, delimiter=',', skip_header=True)
-
-    for i in range(arr.shape[0]):
-        R = getRotationMatrixFromVector(arr[i, 13], arr[i, 14], arr[i, 15], arr[i, 16])
-        XYZ = np.matmul(R.T, np.array([arr[i, 2], arr[i, 3], arr[i, 4]]))
-        abc = np.matmul(R.T, np.array([arr[i, 7], arr[i, 8], arr[i, 9]]))
-        XLYLZL = np.matmul(R.T, np.array([arr[i, 10], arr[i, 11], arr[i, 12]]))
-
-        arr[i, [[2, 3, 4, 7, 8, 9, 10, 11, 12]]] = [XYZ[0], XYZ[1], XYZ[2], abc[0], abc[1], abc[2], XLYLZL[0], XLYLZL[1], XLYLZL[2]]
-
-    np.savetxt(file, arr, delimiter=',',
-               header='lat,lon,X,Y,Z,timeStamp,acc,a,b,c,XL,YL,ZL,RX,RY,RZ,RC,bike,childCheckBox,trailerCheckBox,pLoc,incident,i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,scary',
-               comments='')
-
-
 def scale(dir, target_region=None):
     scaler_maxabs = MaxAbsScaler()
 
@@ -362,7 +382,7 @@ def scale(dir, target_region=None):
                 df.to_csv(file, ',', index=False)
 
 
-def create_bucket(bucket_size, file):
+def create_buckets_inner(bucket_size, file):
     df = pd.read_csv(file)
 
     length = df.shape[0]
@@ -395,20 +415,14 @@ def create_buckets(dir, target_region=None, bucket_size=22):
             if target_region is not None and target_region != region:
                 continue
 
-            file_list = []
-
-            root = subdir
-
-            for path, sd, files in os.walk(root):
-                for name in files:
-                    if fnmatch(name, 'VM2_*.csv'):
-                        file_list.append(os.path.join(path, name))
+            file_list = glob.glob(os.path.join(subdir, 'VM2_*.csv'))
 
             with mp.Pool(4) as pool:
-                pool.map(partial(create_bucket, bucket_size), file_list)
+                pool.map(partial(create_buckets_inner, bucket_size), file_list)
 
 
 def preprocess(dir, target_region=None, bucket_size=22):
+    remove_unnecessary_cols(dir, target_region)
     remove_invalid_rides(dir, target_region)
     remove_acc_outliers(dir, target_region)
     calc_vel_delta(dir, target_region)
