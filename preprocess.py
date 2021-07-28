@@ -1,6 +1,5 @@
 import os
 import glob
-from fnmatch import fnmatch
 import numpy as np
 import pandas as pd
 import datetime as dt
@@ -193,45 +192,146 @@ def rotateRides(dir, target_region=None):
                 pool.map(rotateRides_inner, file_list)
 
 
-def linear_interpolate(dir, target_region=None):
+def linear_interpolate(file):
+    df = pd.read_csv(file)
+
+    # convert timestamp to datetime format
+    df['timeStamp'] = df['timeStamp'].apply(
+        lambda x: dt.datetime.utcfromtimestamp(x / 1000))
+
+    # set timeStamp col as pandas datetime index
+    df['timeStamp'] = pd.to_datetime(df['timeStamp'], unit='ns')
+
+    df = df.set_index(pd.DatetimeIndex(df['timeStamp']))
+
+    # drop all duplicate occurrences of the labels and keep the first occurrence
+    df = df[~df.index.duplicated(keep='first')]
+
+    # interpolation of acc via linear interpolation based on timestamp
+    df['acc'].interpolate(method='time', inplace=True)
+
+    df.sort_index(axis=0, ascending=False, inplace=True)
+
+    # interpolation of missing values via padding on the reversed df
+    df['lat'].interpolate(method='pad', inplace=True)
+    df['lon'].interpolate(method='pad', inplace=True)
+
+    df.sort_index(axis=0, ascending=True, inplace=True)
+
+    df['timeStamp'] = df.index.astype(np.int64)
+
+    df.to_csv(file, ',', index=False)
+
+
+def equidistant_interpolate(time_interval, file):
+    df = pd.read_csv(file)
+    # drop columns which are no longer needed
+    df.drop(columns=['RX', 'RY', 'RZ', 'RC'], inplace=True)
+
+    # floor start_time so that full seconds are included in the new timestamp series (time_interval may be 50, 100, 125 or 200ms)
+    # this ensures that less original data are thrown away after resampling, as GPS measurements are often at full seconds
+    start_time = (df['timeStamp'].iloc[0] // time_interval) * time_interval
+    end_time = df['timeStamp'].iloc[-1]
+
+    timestamps_original = df['timeStamp'].values
+    # new timestamps for equidistant resampling after linear interpolation
+    timestamps_new = np.arange(start_time, end_time, time_interval)
+    # throw away new timestamps that are already in the original rows
+    timestamps_net_new = list(set(timestamps_new) - set(timestamps_original))
+
+    # store which original rows to remove later, as they have no equidistant timestamp
+    removables = list(set(timestamps_original) - set(timestamps_new))
+    removables = [dt.datetime.utcfromtimestamp(x / 1000) for x in removables]
+
+    df_net_new = pd.concat(
+        [pd.DataFrame([timestamp_net_new], columns=['timeStamp']) for timestamp_net_new in
+         timestamps_net_new], ignore_index=True)
+    df = pd.concat([df, df_net_new])
+
+    # convert timestamp to datetime format
+    df['timeStamp'] = df['timeStamp'].apply(
+        lambda x: dt.datetime.utcfromtimestamp(x / 1000))
+
+    # set timeStamp col as pandas datetime index
+    df['timeStamp'] = pd.to_datetime(df['timeStamp'], unit='ms')
+
+    df = df.set_index(pd.DatetimeIndex(df['timeStamp']))
+
+    # drop all duplicate occurrences of the labels and keep the first occurrence,
+    # as there might be some rides with original rows with duplicate timestamps
+    # note that the net new timestamp rows are after the original rows
+    df = df[~df.index.duplicated(keep='first')]
+
+    # interpolation of acc via linear interpolation based on timestamp
+    df['acc'].interpolate(method='time', inplace=True)
+    df['X'].interpolate(method='time', inplace=True)
+    df['Y'].interpolate(method='time', inplace=True)
+    df['Z'].interpolate(method='time', inplace=True)
+    df['a'].interpolate(method='time', inplace=True)
+    df['b'].interpolate(method='time', inplace=True)
+    df['c'].interpolate(method='time', inplace=True)
+    df['XL'].interpolate(method='time', inplace=True)
+    df['YL'].interpolate(method='time', inplace=True)
+    df['ZL'].interpolate(method='time', inplace=True)
+
+    # interpolation of missing lat & lon velocity values via padding on the reversed df
+    df.sort_index(axis=0, ascending=False, inplace=True)
+    df['lat'].interpolate(method='pad', inplace=True)
+    df['lon'].interpolate(method='pad', inplace=True)
+
+    df.sort_index(axis=0, ascending=True, inplace=True)
+
+    incident_list = df.loc[df['incident'] > 0]
+
+    for i in range(incident_list.shape[0]):
+
+        found = False
+
+        while found != True:
+
+            idx = df.index[df.index.get_loc(incident_list.iloc[i]['timeStamp'], method='nearest')]
+
+            if idx not in removables:
+                df.at[idx, 'incident'] = 1.0  # TODO: change to actual incident type
+                found = True
+            else:
+                df = df.drop(idx)
+                removables.remove(idx)
+
+    # remove original rows which have no equidistant timestamp
+    df = df.drop(removables)
+
+    # convert timestamp back to unix timestamp format in milliseconds
+    df['timeStamp'] = df.index.astype(np.int64) // 10 ** 6
+
+    df['incident'].fillna(0, inplace=True)
+
+    df.to_csv(file, ',', index=False)
+
+
+def interpolate(dir, target_region=None, time_interval=100, interpolation_type='linear'):
     for split in ['train', 'test', 'val']:
 
         for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
-                           desc='apply linear interpolation on {} data'.format(split)):
+                           desc='interpolate {} data'.format(split)):
             region = os.path.basename(subdir)
 
             if target_region is not None and target_region != region:
                 continue
 
-            for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
-                df = pd.read_csv(file)
+            file_list = glob.glob(os.path.join(subdir, 'VM2_*.csv'))
 
-                # convert timestamp to datetime format
-                df['timeStamp'] = df['timeStamp'].apply(
-                    lambda x: dt.datetime.utcfromtimestamp(x / 1000))
+            with mp.Pool(4) as pool:
 
-                # set timeStamp col as pandas datetime index
-                df['timeStamp'] = pd.to_datetime(df['timeStamp'], unit='ns')
+                if interpolation_type == 'linear':
+                    pool.map(linear_interpolate, file_list)
 
-                df = df.set_index(pd.DatetimeIndex(df['timeStamp']))
+                elif interpolation_type == 'equidistant':
+                    pool.map(partial(equidistant_interpolate, time_interval), file_list)
 
-                # drop all duplicate occurrences of the labels and keep the first occurrence
-                df = df[~df.index.duplicated(keep='first')]
-
-                # interpolation of acc via linear interpolation based on timestamp
-                df['acc'].interpolate(method='time', inplace=True)
-
-                df.sort_index(axis=0, ascending=False, inplace=True)
-
-                # interpolation of missing values via padding on the reversed df
-                df['lat'].interpolate(method='pad', inplace=True)
-                df['lon'].interpolate(method='pad', inplace=True)
-
-                df.sort_index(axis=0, ascending=True, inplace=True)
-
-                df['timeStamp'] = df.index.astype(np.int64)
-
-                df.to_csv(file, ',', index=False)
+                else:
+                    print('interpolation_type is incorrect')
+                    return
 
 
 def remove_vel_outliers(dir, target_region=None):
@@ -421,13 +521,13 @@ def create_buckets(dir, target_region=None, bucket_size=22):
                 pool.map(partial(create_buckets_inner, bucket_size), file_list)
 
 
-def preprocess(dir, target_region=None, bucket_size=44):
+def preprocess(dir, target_region=None, bucket_size=44, time_interval=100, interpolation_type='linear'):
     remove_unnecessary_cols(dir, target_region)
     remove_invalid_rides(dir, target_region)
     remove_acc_outliers(dir, target_region)
     calc_vel_delta(dir, target_region)
     rotateRides(dir, target_region)
-    linear_interpolate(dir, target_region)
+    interpolate(dir, target_region, time_interval, interpolation_type)
     remove_vel_outliers(dir, target_region)
     remove_empty_rows(dir, target_region)
     scale(dir, target_region)
@@ -438,4 +538,6 @@ if __name__ == '__main__':
     dir = '../Ride_Data'
     target_region = None
     bucket_size = 44
-    preprocess(dir, target_region, bucket_size)
+    time_interval = 100
+    interpolation_type = 'linear'
+    preprocess(dir, target_region, bucket_size, time_interval, interpolation_type)
