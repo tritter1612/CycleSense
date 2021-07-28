@@ -25,7 +25,6 @@ def export_file(target_dir, split, file):
             incident_info_lines = incident_info.splitlines()
             ride_info_lines = ride_info.splitlines()
             incident_info_list = []
-            incident_info_tuple = []
 
             for k, line in enumerate(incident_info_lines):
                 if k == 0:
@@ -62,7 +61,15 @@ def export_file(target_dir, split, file):
                                                i3,
                                                i4, i5, i6, i7, i8, i9, i10, scary]
 
-                        incident_info_list.append(incident_info_tuple)
+                        found = False
+                        if len(incident_info_list) > 0:
+                            for info_tuple in incident_info_list:
+                                if incident_ts == info_tuple[3]:
+                                    # incident_ts already in the list
+                                    found = True
+                        if not found:
+                            # new incident: add it to list
+                            incident_info_list.append(incident_info_tuple)
 
             for k, line in enumerate(ride_info_lines):
 
@@ -124,15 +131,14 @@ def export_file(target_dir, split, file):
 
                     arr_list.append(line_arr)
 
+            # check if all incidents could be assigned properly, if not remove ride
+            for t in incident_info_list:
+                if int(t[8]) != -5:
+                    print('WARNING: Incident with timestamp ' + t[3] + ' not assigned to a ride_info_line in file ' + file)
+                    return
+
             try:
                 arr = np.stack(arr_list)
-                # check if incident_info_list is empty, print warning if not, as incident will be lost
-                if len(incident_info_list) != 0:
-                    for t in incident_info_list:
-                        if int(t[8]) != -5:
-                            print('WARNING: Incident with timestamp ' + t[
-                                3] + ' not assigned to a ride_info_line in file ' + file)
-
             except:
                 print('file {} has the wrong format'.format(file))
                 return
@@ -188,11 +194,11 @@ def export(data_dir, target_dir, target_region=None):
             pool.map(partial(export_file, target_dir, 'val'), val.values)
             pool.map(partial(export_file, target_dir, 'test'), test.values)
 
-        for split in ['train', 'test', 'val']:
-            count = 0
-            for subdir in tqdm(glob.glob(os.path.join(target_dir, split, '[!.]*')), desc='remove invalid rides in {} data'.format(split)):
-                count += len(glob.glob(os.path.join(subdir, 'VM2_*.csv')))
-            print('number of rides in {}: {}'.format(split, count))
+    for split in ['train', 'test', 'val']:
+        count = 0
+        for subdir in tqdm(glob.glob(os.path.join(target_dir, split, '[!.]*')), desc='count rides in {} data'.format(split)):
+            count += len(glob.glob(os.path.join(subdir, 'VM2_*.csv')))
+        print('number of rides in {}: {}'.format(split, count))
 
 
 if __name__ == '__main__':
