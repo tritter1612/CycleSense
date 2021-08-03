@@ -1,8 +1,9 @@
 import os
 import numpy as np
+from datetime import datetime
 import tensorflow as tf
 from tensorflow.keras.layers import Dense, Flatten, Conv1D, MaxPooling1D, Dropout, TimeDistributed, LSTM, ConvLSTM2D
-from sklearn.metrics import matthews_corrcoef, confusion_matrix, f1_score, precision_score, recall_score
+from sklearn.metrics import matthews_corrcoef, confusion_matrix, f1_score, precision_score, recall_score, roc_auc_score
 
 from data_loader import load_data
 
@@ -42,7 +43,7 @@ class CNN_LSTM_(tf.keras.models.Sequential):
         super().__init__()
 
     def create_model(self):
-        self.add(TimeDistributed(Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=(None, 2, 11, 8))))
+        self.add(TimeDistributed(Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=(None, 4, 25, 8))))
         self.add(TimeDistributed(Conv1D(filters=64, kernel_size=3, activation='relu')))
         self.add(TimeDistributed(Dropout(0.5)))
         self.add(TimeDistributed(MaxPooling1D(pool_size=2)))
@@ -61,7 +62,7 @@ class Conv_LSTM_(tf.keras.models.Sequential):
         super().__init__()
 
     def create_model(self):
-        self.add(ConvLSTM2D(filters=64, kernel_size=(1, 3), activation='relu', input_shape=(2, 1, 11, 8)))
+        self.add(ConvLSTM2D(filters=64, kernel_size=(1, 3), activation='relu', input_shape=(4, 1, 25, 8)))
         self.add(Dropout(0.5))
         self.add(Flatten())
         self.add(Dense(512, activation='relu'))
@@ -70,7 +71,7 @@ class Conv_LSTM_(tf.keras.models.Sequential):
         self.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
 
 
-def train(train_ds, val_ds, test_ds, num_epochs=10, patience=1, checkpoint_dir='checkpoints/cnn/training'):
+def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, checkpoint_dir='checkpoints/cnn/training'):
     model = CNN_LSTM_()
     model.create_model()
 
@@ -96,7 +97,11 @@ def train(train_ds, val_ds, test_ds, num_epochs=10, patience=1, checkpoint_dir='
         patience=patience,
         verbose=1)
 
-    model.fit(train_ds, validation_data=val_ds, epochs=num_epochs, callbacks=[cp_callback, es_callback])
+    # Define the Keras TensorBoard callback.
+    tb_logdir = 'tb_logs/fit/' + datetime.now().strftime('%Y%m%d-%H%M%S')
+    tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=tb_logdir)
+
+    model.fit(train_ds, validation_data=val_ds, epochs=num_epochs, callbacks=[cp_callback, es_callback, tensorboard_callback], class_weight=class_weight)
 
     print()
     print('Model evaluation on train set after training:')
@@ -127,6 +132,8 @@ def train(train_ds, val_ds, test_ds, num_epochs=10, patience=1, checkpoint_dir='
     print(recall_score(y_true, y_pred))
     print('Phi score:')
     print(matthews_corrcoef(y_true, y_pred))
+    print('roc auc score:')
+    print(roc_auc_score(y_true, y_pred))
 
 if __name__ == '__main__':
     dir = '../Ride_Data'
@@ -137,5 +144,5 @@ if __name__ == '__main__':
     num_epochs = 100
     patience = 10
 
-    train_ds, val_ds, test_ds = load_data(dir, target_region, batch_size, modeln='CNNLSTM')
-    train(train_ds, val_ds, test_ds, num_epochs, patience, checkpoint_dir)
+    train_ds, val_ds, test_ds, class_weight = load_data(dir, target_region, batch_size, modeln='CNNLSTM')
+    train(train_ds, val_ds, test_ds, class_weight, num_epochs, patience, checkpoint_dir)

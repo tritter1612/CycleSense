@@ -12,88 +12,65 @@ def pack_features_vector(features, labels):
     features = tf.stack(list(features.values()), axis=1)
 
     if model == 'LSTM':
-        features = tf.reshape(features, (-1, 22, 9))
-        labels = tf.reshape(labels, (-1, 22,))
+        features = tf.reshape(features, (-1, 100, 8))
+        labels = tf.reshape(labels, (-1, 100,))
         labels = tf.reduce_mean(labels, axis=1)
 
     if model == 'CNNLSTM':
-        features = tf.reshape(features, (-1, 2, 11, 9))
-        labels = tf.reshape(labels, (-1, 22,))
+        features = tf.reshape(features, (-1, 4, 25, 8))
+        labels = tf.reshape(labels, (-1, 100,))
         labels = tf.reduce_mean(labels, axis=1)
 
     if model == 'ConvLSTM':
-        features = tf.reshape(features, (-1, 2, 1, 11, 9))
-        labels = tf.reshape(labels, (-1, 22,))
+        features = tf.reshape(features, (-1, 4, 1, 25, 9))
+        labels = tf.reshape(labels, (-1, 100,))
         labels = tf.reduce_mean(labels, axis=1)
 
     return features, labels
 
 
-def load_data(dir, target_region, batch_size=22, modeln='DNN'):
+def load_data(dir, target_region, batch_size=44, modeln='DNN'):
     global model
     model = modeln
 
-    pos_train_counter = float(len(glob.glob(os.path.join(dir, 'train', target_region, '*_bucket_incident.csv'))) * 22)
-    neg_train_counter = float(len(glob.glob(os.path.join(dir, 'train', target_region, '*_bucket.csv'))) * 22)
+    pos_train_counter = float(len(glob.glob(os.path.join(dir, 'train', target_region, '*_bucket_incident.csv'))))
+    neg_train_counter = float(len(glob.glob(os.path.join(dir, 'train', target_region, '*_bucket.csv'))))
 
-    pos_val_counter = float(len(glob.glob(os.path.join(dir, 'val', target_region, '*_bucket_incident.csv'))) * 22)
-    neg_val_counter = float(len(glob.glob(os.path.join(dir, 'val', target_region, '*_bucket.csv'))) * 22)
+    weight_for_0 = (1 / neg_train_counter) * ((pos_train_counter + neg_train_counter) / 2.0)
+    weight_for_1 = (1 / pos_train_counter) * ((pos_train_counter + neg_train_counter) / 2.0)
 
-    # incidents
-    pos_data_train = tf.data.experimental.make_csv_dataset(
-        os.path.join(dir, 'train', target_region, '*_bucket_incident.csv'),
+    class_weight = {0: weight_for_0, 1: weight_for_1}
+
+    train_list = sorted(glob.glob(os.path.join(dir, 'train', target_region, '*.csv')))
+    val_list = sorted(glob.glob(os.path.join(dir, 'val', target_region, '*.csv')))
+    test_list = sorted(glob.glob(os.path.join(dir, 'test', target_region, '*.csv')))
+
+    data_train = tf.data.experimental.make_csv_dataset(
+        train_list,
         batch_size=batch_size, label_name='incident',
-        num_parallel_reads=1,
-        shuffle=False,
-        prefetch_buffer_size=batch_size,
-        num_epochs=np.trunc(neg_train_counter / pos_train_counter),
-        select_columns=['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'incident'])
-
-    # non-incidents
-    neg_data_train = tf.data.experimental.make_csv_dataset(
-        os.path.join(dir, 'train', target_region, '*_bucket.csv'),
-        batch_size=batch_size, label_name='incident',
-        num_parallel_reads=1,
         shuffle=False,
         prefetch_buffer_size=batch_size,
         num_epochs=1,
-        select_columns=['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'incident'])
+        select_columns=['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c', 'incident'])
 
-    # incidents
-    pos_data_val = tf.data.experimental.make_csv_dataset(
-        os.path.join(dir, 'val', target_region, '*_bucket_incident.csv'),
+    data_val = tf.data.experimental.make_csv_dataset(
+        val_list,
         batch_size=batch_size, label_name='incident',
-        num_parallel_reads=1,
-        shuffle=False,
-        prefetch_buffer_size=batch_size,
-        num_epochs=np.trunc(neg_val_counter / pos_val_counter),
-        select_columns=['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'incident'])
-
-    # non-incidents
-    neg_data_val = tf.data.experimental.make_csv_dataset(
-        os.path.join(dir, 'val', target_region, '*_bucket.csv'),
-        batch_size=batch_size, label_name='incident',
-        num_parallel_reads=1,
         shuffle=False,
         prefetch_buffer_size=batch_size,
         num_epochs=1,
-        select_columns=['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'incident'])
+        select_columns=['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c', 'incident'])
 
     data_test = tf.data.experimental.make_csv_dataset(
-        os.path.join(dir, 'test', target_region, '*.csv'),
+        test_list,
         batch_size=batch_size, label_name='incident',
         shuffle=False,
         prefetch_buffer_size=batch_size,
         num_epochs=1,
-        select_columns=['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'incident'])
+        select_columns=['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c', 'incident'])
 
-    pos_train_ds = pos_data_train.map(pack_features_vector)
-    neg_train_ds = neg_data_train.map(pack_features_vector)
-    pos_val_ds = pos_data_val.map(pack_features_vector)
-    neg_val_ds = neg_data_val.map(pack_features_vector)
+    train_ds = data_train.map(pack_features_vector)
+    val_ds = data_val.map(pack_features_vector)
     test_ds = data_test.map(pack_features_vector)
 
-    train_ds_resampled = tf.data.experimental.sample_from_datasets([pos_train_ds, neg_train_ds], weights=[0.5, 0.5])
-    val_ds_resampled = tf.data.experimental.sample_from_datasets([pos_val_ds, neg_val_ds], weights=[0.5, 0.5])
-
-    return train_ds_resampled, val_ds_resampled, test_ds
+    return train_ds, val_ds, test_ds, class_weight
