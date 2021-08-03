@@ -497,10 +497,10 @@ def create_buckets_inner(bucket_size, file):
 
             if (np.any((df_split['incident'] >= 1.0).to_numpy())):
                 df_split['incident'] = 1.0
-                df_split.to_csv(file.replace('.csv', '') + '_no' + str(k) + '_bucket_incident.csv', ',', index=False)
+                df_split.to_csv(file.replace('.csv', '') + '_no' + str(k).zfill(5) + '_bucket_incident.csv', ',', index=False)
             else:
                 df_split['incident'] = 0.0
-                df_split.to_csv(file.replace('.csv', '') + '_no' + str(k) + '_bucket.csv', ',', index=False)
+                df_split.to_csv(file.replace('.csv', '') + '_no' + str(k).zfill(5) + '_bucket.csv', ',', index=False)
 
     os.remove(file)
 
@@ -537,7 +537,7 @@ def preprocess(dir, target_region=None, bucket_size=44, time_interval=100, inter
 if __name__ == '__main__':
     dir = '../Ride_Data'
     target_region = None
-    bucket_size = 44
+    bucket_size = 100
     time_interval = 100
-    interpolation_type = 'linear'
+    interpolation_type = 'equidistant'
     preprocess(dir, target_region, bucket_size, time_interval, interpolation_type)
