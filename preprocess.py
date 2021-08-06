@@ -10,32 +10,6 @@ import math
 from functools import partial
 
 
-def remove_unnecessary_cols_inner(file):
-    df = pd.read_csv(file)
-
-    # drop columns which are no longer needed
-    df.drop(columns=['bike', 'childCheckBox', 'trailerCheckBox', 'pLoc', 'i1', 'i2', 'i3', 'i4', 'i5', 'i6', 'i7', 'i8',
-                     'i9', 'i10', 'scary'], inplace=True)
-
-    df.to_csv(file, ',', index=False)
-
-
-def remove_unnecessary_cols(dir, target_region=None):
-    for split in ['train', 'test', 'val']:
-
-        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
-                           desc='remove unnecessary cols in {} data'.format(split)):
-            region = os.path.basename(subdir)
-
-            if target_region is not None and target_region != region:
-                continue
-
-            file_list = glob.glob(os.path.join(subdir, 'VM2_*.csv'))
-
-            with mp.Pool(4) as pool:
-                pool.map(remove_unnecessary_cols_inner, file_list)
-
-
 def remove_invalid_rides(dir, target_region=None):
     for split in ['train', 'test', 'val']:
 
@@ -58,7 +32,7 @@ def remove_invalid_rides(dir, target_region=None):
                 df_cp.dropna(inplace=True, axis=0)
 
                 if len(df_cp) == 0 or len(breakpoints[0]) > 0:
-                    # remove rides where one col is completely empty or timestamp interval is too long
+                    # remove rides where one col is completely empty or gps timestamp interval is too long
                     os.remove(file)
 
 
@@ -76,9 +50,9 @@ def remove_acc_outliers_inner(lower, upper, file):
         # for accuracy outliers, set lat, lon and acc to ''
         df.loc[outlier_rows, 'lat'] = ''
         df.loc[outlier_rows, 'lon'] = ''
-        df.loc[outlier_rows, 'acc'] = ''
 
-        df.to_csv(file, ',', index=False)
+    df.drop(columns=['acc'], inplace=True)
+    df.to_csv(file, ',', index=False)
 
 
 def remove_acc_outliers(dir, target_region=None):
@@ -159,39 +133,6 @@ def calc_vel_delta(dir, target_region=None):
                 df.to_csv(file, ',', index=False)
 
 
-def rotateRides_inner(file):
-    arr = np.genfromtxt(file, delimiter=',', skip_header=True)
-
-    for i in range(arr.shape[0]):
-        R = getRotationMatrixFromVector(arr[i, 13], arr[i, 14], arr[i, 15], arr[i, 16])
-        XYZ = np.matmul(R.T, np.array([arr[i, 2], arr[i, 3], arr[i, 4]]))
-        abc = np.matmul(R.T, np.array([arr[i, 7], arr[i, 8], arr[i, 9]]))
-        XLYLZL = np.matmul(R.T, np.array([arr[i, 10], arr[i, 11], arr[i, 12]]))
-
-        arr[i, [[2, 3, 4, 7, 8, 9, 10, 11, 12]]] = [XYZ[0], XYZ[1], XYZ[2], abc[0], abc[1], abc[2], XLYLZL[0],
-                                                    XLYLZL[1], XLYLZL[2]]
-
-    np.savetxt(file, arr, delimiter=',',
-               header='lat,lon,X,Y,Z,timeStamp,acc,a,b,c,XL,YL,ZL,RX,RY,RZ,RC,incident',
-               comments='')
-
-
-def rotateRides(dir, target_region=None):
-    for split in ['train', 'test', 'val']:
-
-        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
-                           desc='rotate rides in {} data'.format(split)):
-            region = os.path.basename(subdir)
-
-            if target_region is not None and target_region != region:
-                continue
-
-            file_list = glob.glob(os.path.join(subdir, 'VM2_*.csv'))
-
-            with mp.Pool(4) as pool:
-                pool.map(rotateRides_inner, file_list)
-
-
 def linear_interpolate(file):
     df = pd.read_csv(file)
 
@@ -207,8 +148,10 @@ def linear_interpolate(file):
     # drop all duplicate occurrences of the labels and keep the first occurrence
     df = df[~df.index.duplicated(keep='first')]
 
-    # interpolation of acc via linear interpolation based on timestamp
-    df['acc'].interpolate(method='time', inplace=True)
+    # interpolation of a, b, c via linear interpolation based on timestamp
+    df['a'].interpolate(method='time', inplace=True)
+    df['b'].interpolate(method='time', inplace=True)
+    df['c'].interpolate(method='time', inplace=True)
 
     df.sort_index(axis=0, ascending=False, inplace=True)
 
@@ -225,8 +168,6 @@ def linear_interpolate(file):
 
 def equidistant_interpolate(time_interval, file):
     df = pd.read_csv(file)
-    # drop columns which are no longer needed
-    df.drop(columns=['RX', 'RY', 'RZ', 'RC'], inplace=True)
 
     # floor start_time so that full seconds are included in the new timestamp series (time_interval may be 50, 100, 125 or 200ms)
     # this ensures that less original data are thrown away after resampling, as GPS measurements are often at full seconds
@@ -262,17 +203,13 @@ def equidistant_interpolate(time_interval, file):
     # note that the net new timestamp rows are after the original rows
     df = df[~df.index.duplicated(keep='first')]
 
-    # interpolation of acc via linear interpolation based on timestamp
-    df['acc'].interpolate(method='time', inplace=True)
+    # interpolation of X, Y, Z, a, b, c via linear interpolation based on timestamp
     df['X'].interpolate(method='time', inplace=True)
     df['Y'].interpolate(method='time', inplace=True)
     df['Z'].interpolate(method='time', inplace=True)
     df['a'].interpolate(method='time', inplace=True)
     df['b'].interpolate(method='time', inplace=True)
     df['c'].interpolate(method='time', inplace=True)
-    df['XL'].interpolate(method='time', inplace=True)
-    df['YL'].interpolate(method='time', inplace=True)
-    df['ZL'].interpolate(method='time', inplace=True)
 
     # interpolation of missing lat & lon velocity values via padding on the reversed df
     df.sort_index(axis=0, ascending=False, inplace=True)
@@ -418,32 +355,6 @@ def remove_empty_rows(dir, target_region=None):
                     os.remove(file)
 
 
-def getRotationMatrixFromVector(RX, RY, RZ, RC):
-    R = np.zeros((3, 3))
-
-    sq_q1 = 2 * RX * RX
-    sq_q2 = 2 * RY * RY
-    sq_q3 = 2 * RZ * RZ
-    q1_q2 = 2 * RX * RY
-    q3_q0 = 2 * RZ * RC
-    q1_q3 = 2 * RX * RZ
-    q2_q0 = 2 * RY * RC
-    q2_q3 = 2 * RY * RZ
-    q1_q0 = 2 * RX * RC
-
-    R[0, 0] = 1 - sq_q2 - sq_q3
-    R[1, 0] = q1_q2 - q3_q0
-    R[2, 0] = q1_q3 + q2_q0
-    R[0, 1] = q1_q2 + q3_q0
-    R[1, 1] = 1 - sq_q1 - sq_q3
-    R[2, 1] = q2_q3 - q1_q0
-    R[0, 2] = q1_q3 - q2_q0
-    R[1, 2] = q2_q3 + q1_q0
-    R[2, 2] = 1 - sq_q1 - sq_q2
-
-    return R
-
-
 def scale(dir, target_region=None):
     scaler_maxabs = MaxAbsScaler()
 
@@ -461,7 +372,7 @@ def scale(dir, target_region=None):
 
             df.fillna(0, inplace=True)
 
-            scaler_maxabs.partial_fit(df[['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'XL', 'YL', 'ZL']])
+            scaler_maxabs.partial_fit(df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c']])
 
     print(scaler_maxabs.max_abs_)
 
@@ -475,9 +386,8 @@ def scale(dir, target_region=None):
 
             for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
                 df = pd.read_csv(file)
-                df[['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'XL', 'YL',
-                    'ZL']] = scaler_maxabs.transform(
-                    df[['lat', 'lon', 'X', 'Y', 'Z', 'acc', 'a', 'b', 'c', 'XL', 'YL', 'ZL']])
+                df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c']] = scaler_maxabs.transform(
+                    df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c']])
 
                 df.to_csv(file, ',', index=False)
 
@@ -521,12 +431,10 @@ def create_buckets(dir, target_region=None, bucket_size=22):
                 pool.map(partial(create_buckets_inner, bucket_size), file_list)
 
 
-def preprocess(dir, target_region=None, bucket_size=44, time_interval=100, interpolation_type='linear'):
-    remove_unnecessary_cols(dir, target_region)
+def preprocess(dir, target_region=None, bucket_size=44, time_interval=100, interpolation_type='equidistant'):
     remove_invalid_rides(dir, target_region)
     remove_acc_outliers(dir, target_region)
     calc_vel_delta(dir, target_region)
-    rotateRides(dir, target_region)
     interpolate(dir, target_region, time_interval, interpolation_type)
     remove_vel_outliers(dir, target_region)
     remove_empty_rows(dir, target_region)
