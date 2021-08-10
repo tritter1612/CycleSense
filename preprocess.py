@@ -229,7 +229,7 @@ def equidistant_interpolate(time_interval, file):
             idx = df.index[df.index.get_loc(incident_list.iloc[i]['timeStamp'], method='nearest')]
 
             if idx not in removables:
-                df.at[idx, 'incident'] = 1.0  # TODO: change to actual incident type
+                df.at[idx, 'incident'] = 1.0  # TODO: preserve incident type
                 found = True
             else:
                 df = df.drop(idx)
@@ -415,7 +415,7 @@ def create_buckets_inner(bucket_size, file):
     os.remove(file)
 
 
-def create_buckets(dir, target_region=None, bucket_size=22):
+def create_buckets(dir, target_region=None, bucket_size=22, fourier=False, fft_window=8, image_width=20):
     for split in ['train', 'test', 'val']:
 
         for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
@@ -427,11 +427,77 @@ def create_buckets(dir, target_region=None, bucket_size=22):
 
             file_list = glob.glob(os.path.join(subdir, 'VM2_*.csv'))
 
-            with mp.Pool(4) as pool:
-                pool.map(partial(create_buckets_inner, bucket_size), file_list)
+            ride_images_list = []
+
+            if fourier:
+
+                for file in file_list:
+
+                    arr = np.genfromtxt(file, delimiter=',', skip_header=True)
+
+                    lat = arr[:, 0]
+                    lat = lat[:, np.newaxis]
+                    lon = arr[:, 1]
+                    lon = lon[:, np.newaxis]
+                    incident = arr[:, -1]
+                    incident = incident[:, np.newaxis]
+
+                    # remove lat, lon
+                    arr = arr[:, 2:]
+
+                    # remove incident
+                    arr = arr[:, :-1]
+
+                    # remove timestamp
+                    arr = np.concatenate((arr[:, :3], arr[:, 4:]), axis=1)
+
+                    n_window_splits = arr.shape[0] // fft_window
+                    window_split_range = n_window_splits * fft_window
+
+                    if n_window_splits > 0:
+
+                        ride_images = np.stack(np.vsplit(arr[:window_split_range], n_window_splits), axis=1)
+                        lat = np.stack(np.vsplit(lat[:window_split_range], n_window_splits), axis=1)
+                        lon = np.stack(np.vsplit(lon[:window_split_range], n_window_splits), axis=1)
+                        incident = np.stack(np.vsplit(incident[:window_split_range], n_window_splits), axis=1)
+
+                        n_image_splits = n_window_splits // image_width
+                        image_split_range = n_image_splits * image_width
+
+                        if n_image_splits > 0:
+                            ride_image_list = np.array_split(ride_images[:, :image_split_range, :], n_image_splits,
+                                                             axis=1)
+                            lat = np.array_split(lat[:, :image_split_range, :], n_image_splits, axis=1)
+                            lon = np.array_split(lon[:, :image_split_range, :], n_image_splits, axis=1)
+                            incident = np.array_split(incident[:, :image_split_range, :], n_image_splits, axis=1)
+
+                            for i, ride_image in enumerate(ride_image_list):
+                                # apply fourier transformation to data
+                                ride_image_transformed = np.fft.fft(ride_image, axis=0)
+
+                                # append lat, lon & incident
+                                ride_image_transformed = np.dstack(
+                                    (ride_image_transformed, lat[i], lon[i], incident[i]))
+
+                                if np.any(ride_image_transformed[:, :, 8]) > 0:
+                                    ride_image_transformed[:, :, 8] = 1  # TODO: preserve incident type
+                                    ride_images_list.append(ride_image_transformed)
+                                else:
+                                    ride_image_transformed[:, :, 8] = 0
+                                    ride_images_list.append(ride_image_transformed)
+
+                    os.remove(file)
+
+                os.rmdir(subdir)
+
+                np.savez(os.path.join(dir, split, region + '.npz'), ride_images_list)
+
+            else:
+                with mp.Pool(4) as pool:
+                    pool.map(partial(create_buckets_inner, bucket_size), file_list)
 
 
-def preprocess(dir, target_region=None, bucket_size=44, time_interval=100, interpolation_type='equidistant'):
+def preprocess(dir, target_region=None, bucket_size=44, time_interval=100, interpolation_type='equidistant', fourier=False, fft_window=8, image_width=20):
     remove_invalid_rides(dir, target_region)
     remove_acc_outliers(dir, target_region)
     calc_vel_delta(dir, target_region)
@@ -439,7 +505,7 @@ def preprocess(dir, target_region=None, bucket_size=44, time_interval=100, inter
     remove_vel_outliers(dir, target_region)
     remove_empty_rows(dir, target_region)
     scale(dir, target_region)
-    create_buckets(dir, target_region, bucket_size)
+    create_buckets(dir, target_region, bucket_size, fourier, fft_window, image_width)
 
 
 if __name__ == '__main__':
@@ -448,4 +514,7 @@ if __name__ == '__main__':
     bucket_size = 100
     time_interval = 100
     interpolation_type = 'equidistant'
-    preprocess(dir, target_region, bucket_size, time_interval, interpolation_type)
+    fourier = True
+    fft_window = 8
+    image_width = 20
+    preprocess(dir, target_region, bucket_size, time_interval, interpolation_type, fourier, fft_window, image_width)
