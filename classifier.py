@@ -238,6 +238,8 @@ def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, in
     print('Phi score:')
     print(round(matthews_corrcoef(y_true, y_pred), 5))
 
+    model.summary()
+
 
 
 if __name__ == '__main__':
