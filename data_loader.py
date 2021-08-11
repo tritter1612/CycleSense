@@ -3,20 +3,21 @@ import glob
 import numpy as np
 import tensorflow as tf
 
+input_shape_global = None
+
 
 def pack_features_vector(features, labels):
     """Pack the features into a single array."""
 
     features = tf.stack(list(features.values()), axis=1)
-    features = tf.reshape(features, (-1, 4, 25, 8))
-    labels = tf.reshape(labels, (-1, 100,))
+    features = tf.reshape(features, (-1, input_shape_global[1], input_shape_global[2], input_shape_global[3]))
+    labels = tf.reshape(labels, (-1, input_shape_global[1] * input_shape_global[2],))
     labels = tf.reduce_mean(labels, axis=1)
 
     return features, labels
 
 
 def create_ds(dir, target_region, split, batch_size=32, fourier=True, count=False):
-
     if fourier:
 
         with np.load(os.path.join(dir, split, target_region + '.npz')) as data:
@@ -54,7 +55,9 @@ def create_ds(dir, target_region, split, batch_size=32, fourier=True, count=Fals
         return ds
 
 
-def load_data(dir, target_region, batch_size=32, fourier=True):
+def load_data(dir, target_region, batch_size=32, input_shape=(None, 4, 11, 8), fourier=True):
+    global input_shape_global
+    input_shape_global = input_shape
 
     train_ds, pos_train_counter, neg_train_counter = create_ds(dir, target_region, 'train', batch_size, fourier, True)
     val_ds = create_ds(dir, target_region, 'val', batch_size, fourier)

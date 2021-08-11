@@ -14,8 +14,8 @@ class CNN_LSTM_(tf.keras.models.Sequential):
     def __init__(self):
         super().__init__()
 
-    def create_model(self):
-        self.add(TimeDistributed(Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=(None, 4, 25, 8))))
+    def create_model(self, input_shape):
+        self.add(TimeDistributed(Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=input_shape)))
         self.add(TimeDistributed(Conv1D(filters=64, kernel_size=3, activation='relu')))
         self.add(TimeDistributed(Dropout(0.5)))
         self.add(TimeDistributed(MaxPooling1D(pool_size=2)))
@@ -28,11 +28,11 @@ class CNN_LSTM_(tf.keras.models.Sequential):
 
 class DeepSense(tf.keras.Model):
 
-    def __init__(self, fft_window, image_width):
+    def __init__(self, input_shape=(None, 8, 20, 3, 2)):
         super(DeepSense, self).__init__()
 
         self.acc_conv1 = Conv3D(64, kernel_size=(3, 3, 3), activation=None, padding='valid',
-                                input_shape=(None, fft_window, image_width, 3, 2))
+                                input_shape=input_shape)
         self.acc_batch_norm1 = BatchNormalization()
         self.acc_act1 = ReLU()
         self.acc_dropout1 = Dropout(0.5)
@@ -47,7 +47,7 @@ class DeepSense(tf.keras.Model):
         self.acc_act3 = ReLU()
 
         self.gyro_conv1 = Conv3D(64, kernel_size=(3, 3, 3), activation=None, padding='valid',
-                                 input_shape=(None, fft_window, image_width, 3, 2))
+                                 input_shape=input_shape)
         self.gyro_batch_norm1 = BatchNormalization()
         self.gyro_act1 = ReLU()
         self.gyro_dropout1 = Dropout(0.5)
@@ -63,17 +63,17 @@ class DeepSense(tf.keras.Model):
 
         self.sensor_dropout = Dropout(0.5)
 
-        self.sensor_conv1 = Conv3D(64, kernel_size=(3, 3, 1), activation=None, padding='SAME')
+        self.sensor_conv1 = Conv3D(64, kernel_size=(3, 3, 1), activation=None, padding='same')
         self.sensor_batch_norm1 = BatchNormalization()
         self.sensor_act1 = ReLU()
         self.sensor_dropout1 = Dropout(0.5)
 
-        self.sensor_conv2 = Conv3D(64, kernel_size=(3, 3, 1), activation=None, padding='SAME')
+        self.sensor_conv2 = Conv3D(64, kernel_size=(3, 3, 1), activation=None, padding='same')
         self.sensor_batch_norm2 = BatchNormalization()
         self.sensor_act2 = ReLU()
         self.sensor_dropout2 = Dropout(0.5)
 
-        self.sensor_conv3 = Conv3D(64, kernel_size=(3, 3, 1), activation=None, padding='SAME')
+        self.sensor_conv3 = Conv3D(64, kernel_size=(3, 3, 1), activation=None, padding='same')
         self.sensor_batch_norm3 = BatchNormalization()
         self.sensor_act3 = ReLU()
         self.sensor_dropout3 = Dropout(0.5)
@@ -170,18 +170,17 @@ class DeepSense(tf.keras.Model):
         return sensor
 
 
-def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, checkpoint_dir='checkpoints/cnn/training',
-          fourier=True, fft_window=8, image_width=20):
+def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, input_shape=(None, 8, 20, 3, 2), fourier=True, checkpoint_dir='checkpoints/cnn/training'):
     if fourier:
-        model = DeepSense(fft_window, image_width)
+        model = DeepSense(input_shape)
 
     else:
         model = CNN_LSTM_()
-        model.create_model()
+        model.create_model(input_shape)
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
-    auc = tf.keras.metrics.AUC(from_logits=False)
-    model.compile(optimizer=optimizer, loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
+    auc = tf.keras.metrics.AUC(from_logits=True)
+    model.compile(optimizer=optimizer, loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
                   metrics=['accuracy', auc])
 
     latest = tf.train.latest_checkpoint(os.path.dirname(checkpoint_dir))
@@ -202,9 +201,11 @@ def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, ch
 
     # Create a callback for early stopping
     es_callback = tf.keras.callbacks.EarlyStopping(
-        monitor='val_accuracy',
+        monitor='val_auc',
         patience=patience,
-        verbose=1)
+        verbose=1,
+        mode='max',
+        restore_best_weights=True)
 
     # Define the Keras TensorBoard callback.
     tb_logdir = 'tb_logs/fit/' + datetime.now().strftime('%Y%m%d-%H%M%S')
@@ -212,13 +213,6 @@ def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, ch
 
     model.fit(train_ds, validation_data=val_ds, epochs=num_epochs,
               callbacks=[cp_callback, es_callback, tensorboard_callback], class_weight=class_weight)
-
-    print()
-    print('Model evaluation on train set after training:')
-    model.evaluate(train_ds)
-
-    latest = tf.train.latest_checkpoint(os.path.dirname(checkpoint_dir))
-    model.load_weights(latest)
 
     print('Model evaluation on train set:')
     model.evaluate(train_ds)
@@ -236,13 +230,14 @@ def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, ch
     print('Confusion matrix:')
     print(confusion_matrix(y_true, y_pred))
     print('F1 score:')
-    print(f1_score(y_true, y_pred))
+    print(round(f1_score(y_true, y_pred), 5))
     print('Precision score:')
-    print(precision_score(y_true, y_pred))
+    print(round(precision_score(y_true, y_pred), 5))
     print('Recall score:')
-    print(recall_score(y_true, y_pred))
+    print(round(recall_score(y_true, y_pred), 5))
     print('Phi score:')
-    print(matthews_corrcoef(y_true, y_pred))
+    print(round(matthews_corrcoef(y_true, y_pred), 5))
+
 
 
 if __name__ == '__main__':
@@ -252,11 +247,15 @@ if __name__ == '__main__':
     bucket_size = 100
     batch_size = 128
     num_epochs = 100
-    patience = 25
+    patience = 10
     fourier = True
     fft_window = 8
     image_width = 20
 
-    train_ds, val_ds, test_ds, class_weight = load_data(dir, target_region, batch_size, fourier)
-    train(train_ds, val_ds, test_ds, class_weight, num_epochs, patience, checkpoint_dir, fourier, fft_window,
-          image_width)
+    if fourier:
+        input_shape = (None, fft_window, image_width, 3, 2)
+    else:
+        input_shape = (None, 4, int(bucket_size/4), 8)
+
+    train_ds, val_ds, test_ds, class_weight = load_data(dir, target_region, batch_size, input_shape, fourier)
+    train(train_ds, val_ds, test_ds, class_weight, num_epochs, patience, input_shape, fourier, checkpoint_dir)
