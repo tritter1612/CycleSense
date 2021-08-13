@@ -61,6 +61,21 @@ class DeepSense(tf.keras.Model):
         self.gyro_batch_norm3 = BatchNormalization()
         self.gyro_act3 = ReLU()
 
+        self.gps_conv1 = Conv3D(64, kernel_size=(3, 3, 2), activation=None, padding='valid')
+        self.gps_batch_norm1 = BatchNormalization()
+        self.gps_act1 = ReLU()
+        self.gps_dropout1 = Dropout(0.5)
+
+        self.gps_conv2 = Conv3D(64, kernel_size=(3, 3, 1), activation=None, padding='same')
+        self.gps_batch_norm2 = BatchNormalization()
+        self.gps_act2 = ReLU()
+        self.gps_dropout2 = Dropout(0.5)
+
+        self.gps_conv3 = Conv3D(64, kernel_size=(3, 3, 1), activation=None, padding='same')
+        self.gps_batch_norm3 = BatchNormalization()
+        self.gps_act3 = ReLU()
+        self.gps_dropout3 = Dropout(0.5)
+
         self.sensor_dropout = Dropout(0.5)
 
         self.sensor_conv1 = Conv3D(64, kernel_size=(3, 3, 1), activation=None, padding='same')
@@ -78,7 +93,7 @@ class DeepSense(tf.keras.Model):
         self.sensor_act3 = ReLU()
         self.sensor_dropout3 = Dropout(0.5)
 
-        self.sensor_reshape = Reshape((18, 6 * 2 * 64))
+        self.sensor_reshape = Reshape((18, 6 * 3 * 64))
 
         self.sensor_gru1 = GRUCell(120, activation=None)
         self.sensor_gru2 = GRUCell(120, activation=None)
@@ -139,7 +154,23 @@ class DeepSense(tf.keras.Model):
         gyro = self.gyro_batch_norm3(gyro)
         gyro = self.gyro_act3(gyro)
 
-        sensor = tf.concat([acc[:, :, :, :, :], gyro[:, :, :, :, :]], 3)
+        gps = gps[:, :, :, :, tf.newaxis]
+
+        gps = self.gps_conv1(gps)
+        gps = self.gps_batch_norm1(gps)
+        gps = self.gps_act1(gps)
+        gps = self.gps_dropout1(gps) if training else gps
+
+        gps = self.gps_conv2(gps)
+        gps = self.gps_batch_norm2(gps)
+        gps = self.gps_act2(gps)
+        gps = self.gps_dropout2(gps) if training else gps
+
+        gps = self.gps_conv3(gps)
+        gps = self.gps_batch_norm3(gps)
+        gps = self.gps_act3(gps)
+
+        sensor = tf.concat([acc, gyro, gps], 3)
 
         sensor = self.sensor_dropout(sensor)
 
