@@ -210,8 +210,8 @@ def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, in
         model.create_model(input_shape)
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
-    auc = tf.keras.metrics.AUC(from_logits=True)
-    model.compile(optimizer=optimizer, loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
+    auc = tf.keras.metrics.AUC(from_logits=False)
+    model.compile(optimizer=optimizer, loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
                   metrics=['accuracy', auc])
 
     latest = tf.train.latest_checkpoint(os.path.dirname(checkpoint_dir))
