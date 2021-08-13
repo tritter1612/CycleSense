@@ -17,20 +17,38 @@ def pack_features_vector(features, labels):
     return features, labels
 
 
+def data_gen(dir, split, target_region):
+
+    with np.load(os.path.join(dir, split, target_region)) as data:
+
+        for file in data.files:
+            x = data[file][:, :, :]
+            y = tf.cast(data[file][:, :, 8], tf.dtypes.int32)
+            y = tf.math.reduce_mean(y, axis=0)
+            y = tf.math.reduce_mean(y, axis=0)
+
+            yield x, y
+
+
 def create_ds(dir, target_region, split, batch_size=32, fourier=True, count=False):
     if fourier:
 
-        with np.load(os.path.join(dir, split, target_region + '.npz')) as data:
-            x = data['arr_0'][:, :, :, :]
-            y = tf.cast(data['arr_0'][:, :, :, 8], tf.dtypes.int32)
-            y = tf.math.reduce_mean(y, axis=1)
-            y = tf.math.reduce_mean(y, axis=1)
-            y = y[:, tf.newaxis]
-            pos_counter = (tf.math.reduce_sum(y)).numpy()
-            neg_counter = y.shape[0] - pos_counter
+        pos_counter, neg_counter, len = 0, 0, 0
 
-        ds = tf.data.Dataset.from_tensor_slices((x, y))
-        ds = ds.batch(batch_size)
+        ds = tf.data.Dataset.from_generator(data_gen, args=[dir, split, target_region + '.npz'],
+                                            output_signature=(
+                                                tf.TensorSpec(shape=(8, 20, 9), dtype=tf.complex64),
+                                                tf.TensorSpec(shape=(), dtype=tf.int32)
+                                            ))
+
+        ds = ds.batch(batch_size, num_parallel_calls=tf.data.AUTOTUNE, deterministic=True)
+        ds = ds.prefetch(1)
+
+        if count:
+            for _, y in ds:
+                len += y.shape[0]
+                pos_counter += tf.math.reduce_sum(y).numpy()
+            neg_counter = neg_counter + len - pos_counter
 
     else:
 
@@ -48,7 +66,7 @@ def create_ds(dir, target_region, split, batch_size=32, fourier=True, count=Fals
 
         ds = data.map(pack_features_vector)
 
-    if count == True:
+    if count:
         return ds, pos_counter, neg_counter
 
     else:
@@ -60,12 +78,8 @@ def load_data(dir, target_region, batch_size=32, input_shape=(None, 4, 11, 8), f
     input_shape_global = input_shape
 
     train_ds, pos_train_counter, neg_train_counter = create_ds(dir, target_region, 'train', batch_size, fourier, True)
-    val_ds = create_ds(dir, target_region, 'val', batch_size, fourier)
-    test_ds = create_ds(dir, target_region, 'test', batch_size, fourier)
-
-    train_ds = train_ds
-    val_ds = val_ds
-    test_ds = test_ds
+    val_ds = create_ds(dir, target_region, 'val', batch_size, fourier, False)
+    test_ds = create_ds(dir, target_region, 'test', batch_size, fourier, False)
 
     weight_for_0 = (1 / neg_train_counter) * ((pos_train_counter + neg_train_counter) / 2.0)
     weight_for_1 = (1 / pos_train_counter) * ((pos_train_counter + neg_train_counter) / 2.0)

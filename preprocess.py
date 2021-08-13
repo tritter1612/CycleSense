@@ -427,7 +427,7 @@ def create_buckets(dir, target_region=None, bucket_size=22, fourier=False, fft_w
 
             file_list = glob.glob(os.path.join(subdir, 'VM2_*.csv'))
 
-            ride_images_list = []
+            ride_images_dict = {}
 
             if fourier:
 
@@ -481,23 +481,25 @@ def create_buckets(dir, target_region=None, bucket_size=22, fourier=False, fft_w
 
                                 if np.any(ride_image_transformed[:, :, 8]) > 0:
                                     ride_image_transformed[:, :, 8] = 1  # TODO: preserve incident type
-                                    ride_images_list.append(ride_image_transformed)
+                                    dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(5) + '_bucket_incident.csv'
                                 else:
                                     ride_image_transformed[:, :, 8] = 0
-                                    ride_images_list.append(ride_image_transformed)
+                                    dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(5) + '_bucket.csv'
+
+                                ride_images_dict.update({dict_name : ride_image_transformed})
 
                     os.remove(file)
 
                 os.rmdir(subdir)
 
-                np.savez(os.path.join(dir, split, region + '.npz'), ride_images_list)
+                np.savez(os.path.join(dir, split, region + '.npz'), **ride_images_dict)
 
             else:
                 with mp.Pool(4) as pool:
                     pool.map(partial(create_buckets_inner, bucket_size), file_list)
 
 
-def preprocess(dir, target_region=None, bucket_size=44, time_interval=100, interpolation_type='equidistant', fourier=False, fft_window=8, image_width=20):
+def preprocess(dir, target_region=None, bucket_size=100, time_interval=100, interpolation_type='equidistant', fourier=True, fft_window=8, image_width=20):
     remove_invalid_rides(dir, target_region)
     remove_acc_outliers(dir, target_region)
     calc_vel_delta(dir, target_region)
