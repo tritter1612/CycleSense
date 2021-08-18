@@ -4,9 +4,10 @@ from datetime import datetime
 import tensorflow as tf
 from tensorflow.keras.layers import Dense, Flatten, Conv1D, Conv2D, Conv3D, RNN, GRUCell, StackedRNNCells, ReLU, \
     Reshape, BatchNormalization, ReLU, Dropout, MaxPooling1D, Dropout, TimeDistributed, LSTM, ConvLSTM2D
-from sklearn.metrics import matthews_corrcoef, confusion_matrix, f1_score, precision_score, recall_score, roc_auc_score
+from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score
 
 from data_loader import load_data
+from metrics import TSS, Specificity, Sensitivity
 
 
 class CNN_LSTM_(tf.keras.models.Sequential):
@@ -201,7 +202,8 @@ class DeepSense(tf.keras.Model):
         return sensor
 
 
-def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, input_shape=(None, 8, 20, 3, 2), fourier=True, checkpoint_dir='checkpoints/cnn/training'):
+def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, input_shape=(None, 8, 20, 3, 2),
+          fourier=True, checkpoint_dir='checkpoints/cnn/training'):
     if fourier:
         model = DeepSense(input_shape)
 
@@ -210,9 +212,10 @@ def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, in
         model.create_model(input_shape)
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
-    auc = tf.keras.metrics.AUC(from_logits=False)
+
     model.compile(optimizer=optimizer, loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
-                  metrics=['accuracy', auc])
+                  metrics=['accuracy', tf.keras.metrics.AUC(curve='PR', from_logits=False),
+                           Specificity(), Sensitivity(), TSS()])
 
     latest = tf.train.latest_checkpoint(os.path.dirname(checkpoint_dir))
     try:
@@ -266,11 +269,8 @@ def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, in
     print(round(precision_score(y_true, y_pred), 5))
     print('Recall score:')
     print(round(recall_score(y_true, y_pred), 5))
-    print('Phi score:')
-    print(round(matthews_corrcoef(y_true, y_pred), 5))
 
     model.summary()
-
 
 
 if __name__ == '__main__':
@@ -288,7 +288,7 @@ if __name__ == '__main__':
     if fourier:
         input_shape = (None, fft_window, image_width, 3, 2)
     else:
-        input_shape = (None, 4, int(bucket_size/4), 8)
+        input_shape = (None, 4, int(bucket_size / 4), 8)
 
     train_ds, val_ds, test_ds, class_weight = load_data(dir, target_region, batch_size, input_shape, fourier)
     train(train_ds, val_ds, test_ds, class_weight, num_epochs, patience, input_shape, fourier, checkpoint_dir)
