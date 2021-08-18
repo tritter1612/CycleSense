@@ -1,121 +1,31 @@
-
 import tensorflow as tf
-
-class Specificity(tf.keras.metrics.Metric):
-
-    def __init__(self, name='specificity', **kwargs):
-        super(Specificity, self).__init__(name=name, **kwargs)
-        self.tp = self.add_weight(name='tp', initializer='zeros')
-        self.fn = self.add_weight(name='fn', initializer='zeros')
-
-    def update_state(self, y_true, y_pred, sample_weight=None):
-        y_true = tf.cast(y_true, tf.bool)
-        y_pred = tf.cast(y_pred, tf.bool)
-
-        # true positives
-        values = tf.logical_and(tf.equal(y_true, True), tf.equal(y_pred, True))
-        values = tf.cast(values, self.dtype)
-        if sample_weight is not None:
-            sample_weight = tf.cast(sample_weight, self.dtype)
-            sample_weight = tf.broadcast_to(sample_weight, values.shape)
-            values = tf.multiply(values, sample_weight)
-        self.tp.assign_add(tf.reduce_sum(values))
-
-        # false negatives
-        values = tf.logical_and(tf.equal(y_true, True), tf.equal(y_pred, False))
-        values = tf.cast(values, self.dtype)
-        if sample_weight is not None:
-            sample_weight = tf.cast(sample_weight, self.dtype)
-            sample_weight = tf.broadcast_to(sample_weight, values.shape)
-            values = tf.multiply(values, sample_weight)
-        self.fn.assign_add(tf.reduce_sum(values))
-
-    def result(self):
-        return self.tp / (self.tp + self.fn)
-
-
-class Sensitivity(tf.keras.metrics.Metric):
-
-    def __init__(self, name='sensitivity', **kwargs):
-        super(Sensitivity, self).__init__(name=name, **kwargs)
-        self.fp = self.add_weight(name='fp', initializer='zeros')
-        self.tn = self.add_weight(name='tn', initializer='zeros')
-
-    def update_state(self, y_true, y_pred, sample_weight=None):
-        y_true = tf.cast(y_true, tf.bool)
-        y_pred = tf.cast(y_pred, tf.bool)
-
-        # false positives
-        values = tf.logical_and(tf.equal(y_true, False), tf.equal(y_pred, True))
-        values = tf.cast(values, self.dtype)
-        if sample_weight is not None:
-            sample_weight = tf.cast(sample_weight, self.dtype)
-            sample_weight = tf.broadcast_to(sample_weight, values.shape)
-            values = tf.multiply(values, sample_weight)
-        self.fp.assign_add(tf.reduce_sum(values))
-
-        # true negatives
-        values = tf.logical_and(tf.equal(y_true, False), tf.equal(y_pred, False))
-        values = tf.cast(values, self.dtype)
-        if sample_weight is not None:
-            sample_weight = tf.cast(sample_weight, self.dtype)
-            sample_weight = tf.broadcast_to(sample_weight, values.shape)
-            values = tf.multiply(values, sample_weight)
-        self.tn.assign_add(tf.reduce_sum(values))
-
-
-    def result(self):
-        return self.tn / (self.tn + self.fp)
 
 
 class TSS(tf.keras.metrics.Metric):
 
-    def __init__(self, name='tss', **kwargs):
-        super(TSS, self).__init__(name=name, **kwargs)
-        self.tp = self.add_weight(name='tp', initializer='zeros')
-        self.fp = self.add_weight(name='fp', initializer='zeros')
-        self.tn = self.add_weight(name='tn', initializer='zeros')
-        self.fn = self.add_weight(name='fn', initializer='zeros')
+    def __init__(self, **kwargs):
+        super(TSS, self).__init__(name='tss', **kwargs)
+        self.total_cm = self.add_weight('total_cm_tss', shape=(2, 2), initializer='zeros')
+
+    def reset_state(self):
+        for s in self.variables:
+            s.assign(tf.zeros(shape=s.shape))
 
     def update_state(self, y_true, y_pred, sample_weight=None):
-        y_true = tf.cast(y_true, tf.bool)
-        y_pred = tf.cast(y_pred, tf.bool)
-
-        # true positives
-        values = tf.logical_and(tf.equal(y_true, True), tf.equal(y_pred, True))
-        values = tf.cast(values, self.dtype)
-        if sample_weight is not None:
-            sample_weight = tf.cast(sample_weight, self.dtype)
-            sample_weight = tf.broadcast_to(sample_weight, values.shape)
-            values = tf.multiply(values, sample_weight)
-        self.tp.assign_add(tf.reduce_sum(values))
-
-        # false positives
-        values = tf.logical_and(tf.equal(y_true, False), tf.equal(y_pred, True))
-        values = tf.cast(values, self.dtype)
-        if sample_weight is not None:
-            sample_weight = tf.cast(sample_weight, self.dtype)
-            sample_weight = tf.broadcast_to(sample_weight, values.shape)
-            values = tf.multiply(values, sample_weight)
-        self.fp.assign_add(tf.reduce_sum(values))
-
-        # true negatives
-        values = tf.logical_and(tf.equal(y_true, False), tf.equal(y_pred, False))
-        values = tf.cast(values, self.dtype)
-        if sample_weight is not None:
-            sample_weight = tf.cast(sample_weight, self.dtype)
-            sample_weight = tf.broadcast_to(sample_weight, values.shape)
-            values = tf.multiply(values, sample_weight)
-        self.tn.assign_add(tf.reduce_sum(values))
-
-        # false negatives
-        values = tf.logical_and(tf.equal(y_true, True), tf.equal(y_pred, False))
-        values = tf.cast(values, self.dtype)
-        if sample_weight is not None:
-            sample_weight = tf.cast(sample_weight, self.dtype)
-            sample_weight = tf.broadcast_to(sample_weight, values.shape)
-            values = tf.multiply(values, sample_weight)
-        self.fn.assign_add(tf.reduce_sum(values))
+        self.total_cm.assign_add(self.confusion_matrix(y_true, y_pred))
+        return self.total_cm
 
     def result(self):
-        return self.tp / (self.tp + self.fn) - self.fp/(self.fp + self.tn)
+        cm = self.total_cm
+
+        tn = cm[0, 0]
+        fp = cm[0, 1]
+        fn = cm[1, 0]
+        tp = cm[1, 1]
+
+        tss = tp / (tp + fn) - fp / (fp + tn)
+        return tss
+
+    def confusion_matrix(self, y_true, y_pred):
+        cm = tf.math.confusion_matrix(tf.squeeze(y_true, 1), tf.squeeze(y_pred, 1), dtype=tf.float32, num_classes=2)
+        return cm

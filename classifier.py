@@ -7,7 +7,7 @@ from tensorflow.keras.layers import Dense, Flatten, Conv1D, Conv2D, Conv3D, RNN,
 from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score
 
 from data_loader import load_data
-from metrics import TSS, Specificity, Sensitivity
+from metrics import TSS
 
 
 class CNN_LSTM_(tf.keras.models.Sequential):
@@ -29,8 +29,11 @@ class CNN_LSTM_(tf.keras.models.Sequential):
 
 class DeepSense(tf.keras.Model):
 
-    def __init__(self, input_shape=(None, 8, 20, 3, 2)):
+    def __init__(self, input_shape=(None, 8, 20, 3, 2), output_bias=None):
         super(DeepSense, self).__init__()
+
+        if output_bias is not None:
+            output_bias = tf.keras.initializers.Constant(output_bias)
 
         self.acc_conv1 = Conv3D(64, kernel_size=(3, 3, 3), activation=None, padding='valid',
                                 input_shape=input_shape)
@@ -105,7 +108,7 @@ class DeepSense(tf.keras.Model):
         self.sensor_stacked_rnn_dropout = RNN(StackedRNNCells([self.sensor_gru1_dropout, self.sensor_gru2_dropout]),
                                               return_sequences=True)
 
-        self.fc = Dense(1, activation='sigmoid')
+        self.fc = Dense(1, activation='sigmoid', bias_initializer=output_bias)
 
     def call(self, x, training):
         # split sensors
@@ -190,12 +193,14 @@ class DeepSense(tf.keras.Model):
         sensor = self.sensor_act3(sensor)
         sensor = self.sensor_dropout3(sensor) if training else sensor
 
-        sensor = tf.transpose(sensor, perm=(0, 2, 1, 3, 4))
-        sensor = self.sensor_reshape(sensor)
+        # sensor = tf.transpose(sensor, perm=(0, 2, 1, 3, 4))
+        # sensor = self.sensor_reshape(sensor)
+        #
+        # sensor = self.sensor_stacked_rnn_dropout(sensor) if training else self.sensor_stacked_rnn(sensor)
+        #
+        # sensor = tf.math.reduce_mean(sensor, axis=1, keepdims=False)
 
-        sensor = self.sensor_stacked_rnn_dropout(sensor) if training else self.sensor_stacked_rnn(sensor)
-
-        sensor = tf.math.reduce_mean(sensor, axis=1, keepdims=False)
+        sensor = Flatten()(sensor)
 
         sensor = self.fc(sensor)
 
@@ -204,18 +209,20 @@ class DeepSense(tf.keras.Model):
 
 def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, input_shape=(None, 8, 20, 3, 2),
           fourier=True, checkpoint_dir='checkpoints/cnn/training'):
+    initial_bias = np.log(class_weight[0] / class_weight[1])
+
     if fourier:
-        model = DeepSense(input_shape)
+        model = DeepSense(input_shape, initial_bias)
 
     else:
         model = CNN_LSTM_()
-        model.create_model(input_shape)
+
+    model.create_model(input_shape)
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
 
     model.compile(optimizer=optimizer, loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
-                  metrics=['accuracy', tf.keras.metrics.AUC(curve='PR', from_logits=False),
-                           Specificity(), Sensitivity(), TSS()])
+                  metrics=['accuracy', tf.keras.metrics.AUC(curve='PR', from_logits=False), TSS()])
 
     latest = tf.train.latest_checkpoint(os.path.dirname(checkpoint_dir))
     try:
@@ -263,12 +270,6 @@ def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, in
 
     print('Confusion matrix:')
     print(confusion_matrix(y_true, y_pred))
-    print('F1 score:')
-    print(round(f1_score(y_true, y_pred), 5))
-    print('Precision score:')
-    print(round(precision_score(y_true, y_pred), 5))
-    print('Recall score:')
-    print(round(recall_score(y_true, y_pred), 5))
 
     model.summary()
 
