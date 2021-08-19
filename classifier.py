@@ -216,8 +216,7 @@ def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, in
 
     else:
         model = CNN_LSTM_()
-
-    model.create_model(input_shape)
+        model.create_model(input_shape)
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
 
