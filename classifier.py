@@ -288,19 +288,19 @@ def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, in
     # Create a callback that saves the model's weights
     cp_callback = tf.keras.callbacks.ModelCheckpoint(
         filepath=checkpoint_dir,
-        monitor='val_auc',
+        monitor='val_loss',
         verbose=1,
         save_best_only=True,
-        mode='max',
+        mode='min',
         save_weights_only=True,
         save_freq='epoch')
 
     # Create a callback for early stopping
     es_callback = tf.keras.callbacks.EarlyStopping(
-        monitor='val_auc',
+        monitor='val_loss',
         patience=patience,
         verbose=1,
-        mode='max',
+        mode='min',
         restore_best_weights=True)
 
     # Define the Keras TensorBoard callback.
