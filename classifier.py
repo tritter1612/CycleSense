@@ -7,7 +7,7 @@ from tensorflow.keras.layers import Dense, Flatten, Conv1D, Conv2D, Conv3D, RNN,
 from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score
 
 from data_loader import load_data
-from metrics import TSS
+from metrics import ConfusionMatrixMetric
 
 
 class CNN_LSTM_(tf.keras.models.Sequential):
@@ -206,6 +206,61 @@ class DeepSense(tf.keras.Model):
 
         return sensor
 
+    def train_step(self, data):
+        # Unpack the data. Its structure depends on your model and
+        # on what you pass to `fit()`.
+        if len(data) == 3:
+            x, y, sample_weight = data
+        else:
+            sample_weight = None
+            x, y = data
+
+        with tf.GradientTape() as tape:
+            y_pred = self(x, training=True)  # Forward pass
+            # Compute the loss value.
+            # The loss function is configured in `compile()`.
+            loss = self.compiled_loss(
+                y,
+                y_pred,
+                sample_weight=sample_weight,
+                regularization_losses=self.losses,
+            )
+
+        # Compute gradients
+        trainable_vars = self.trainable_variables
+        gradients = tape.gradient(loss, trainable_vars)
+
+        # Update weights
+        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+        self.compiled_metrics.update_state(y, y_pred)
+        output = {m.name: m.result() for m in self.metrics[:-1]}
+        for i, metric_name in enumerate(self.metrics_names):
+            if 'confusion_matrix_metric' == metric_name:
+                self.metrics[i].fill_output(output)
+        return output
+
+    def test_step(self, data):
+        # Unpack the data. Its structure depends on your model and
+        # on what you pass to `fit()`.
+
+        x, y = data
+
+        y_pred = self(x, training=False)  # Forward pass
+        # Compute the loss value.
+        # The loss function is configured in `compile()`.
+        loss = self.compiled_loss(
+            y,
+            y_pred,
+            regularization_losses=self.losses,
+        )
+
+        self.compiled_metrics.update_state(y, y_pred)
+        output = {m.name: m.result() for m in self.metrics[:-1]}
+        for i, metric_name in enumerate(self.metrics_names):
+            if 'confusion_matrix_metric' == metric_name:
+                self.metrics[i].fill_output(output)
+        return output
+
 
 def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, input_shape=(None, 8, 20, 3, 2),
           fourier=True, checkpoint_dir='checkpoints/cnn/training'):
@@ -221,7 +276,8 @@ def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, in
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
 
     model.compile(optimizer=optimizer, loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
-                  metrics=['accuracy', tf.keras.metrics.AUC(curve='PR', from_logits=False), TSS()])
+                  metrics=['accuracy', ConfusionMatrixMetric(num_classes=2),
+                           tf.keras.metrics.AUC(curve='PR', from_logits=False)])
 
     latest = tf.train.latest_checkpoint(os.path.dirname(checkpoint_dir))
     try:
