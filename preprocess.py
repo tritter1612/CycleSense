@@ -415,7 +415,10 @@ def create_buckets_inner(bucket_size, file):
     os.remove(file)
 
 
-def create_buckets(dir, target_region=None, bucket_size=22, fourier=False, fft_window=8, image_width=20):
+def create_buckets(dir, target_region=None, bucket_size=22, fourier=False, fft_window=8, image_width=20, class_counts_file='class_counts.csv'):
+
+    class_counts_df = pd.DataFrame()
+
     for split in ['train', 'test', 'val']:
 
         for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
@@ -428,6 +431,8 @@ def create_buckets(dir, target_region=None, bucket_size=22, fourier=False, fft_w
             file_list = glob.glob(os.path.join(subdir, 'VM2_*.csv'))
 
             ride_images_dict = {}
+
+            pos_counter, neg_counter = 0, 0
 
             if fourier:
 
@@ -482,13 +487,19 @@ def create_buckets(dir, target_region=None, bucket_size=22, fourier=False, fft_w
                                 if np.any(ride_image_transformed[:, :, 8]) > 0:
                                     ride_image_transformed[:, :, 8] = 1  # TODO: preserve incident type
                                     dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(5) + '_bucket_incident'
+                                    pos_counter += 1
                                 else:
                                     ride_image_transformed[:, :, 8] = 0
                                     dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(5) + '_bucket'
+                                    neg_counter += 1
 
                                 ride_images_dict.update({dict_name : ride_image_transformed})
 
+                    class_counts_df[split + '_' + region] = [pos_counter, neg_counter]
+
                     os.remove(file)
+
+                class_counts_df.to_csv(os.path.join(dir, class_counts_file), ',', index=False)
 
                 os.rmdir(subdir)
 
@@ -499,7 +510,7 @@ def create_buckets(dir, target_region=None, bucket_size=22, fourier=False, fft_w
                     pool.map(partial(create_buckets_inner, bucket_size), file_list)
 
 
-def preprocess(dir, target_region=None, bucket_size=100, time_interval=100, interpolation_type='equidistant', fourier=True, fft_window=8, image_width=20):
+def preprocess(dir, target_region=None, bucket_size=100, time_interval=100, interpolation_type='equidistant', fourier=True, fft_window=8, image_width=20, class_counts_file='class_counts.csv'):
     remove_invalid_rides(dir, target_region)
     remove_acc_outliers(dir, target_region)
     calc_vel_delta(dir, target_region)
@@ -507,7 +518,7 @@ def preprocess(dir, target_region=None, bucket_size=100, time_interval=100, inte
     remove_vel_outliers(dir, target_region)
     remove_empty_rows(dir, target_region)
     scale(dir, target_region)
-    create_buckets(dir, target_region, bucket_size, fourier, fft_window, image_width)
+    create_buckets(dir, target_region, bucket_size, fourier, fft_window, image_width, class_counts_file)
 
 
 if __name__ == '__main__':
@@ -519,4 +530,5 @@ if __name__ == '__main__':
     fourier = True
     fft_window = 8
     image_width = 20
-    preprocess(dir, target_region, bucket_size, time_interval, interpolation_type, fourier, fft_window, image_width)
+    class_counts_file = 'class_counts.csv'
+    preprocess(dir, target_region, bucket_size, time_interval, interpolation_type, fourier, fft_window, image_width, class_counts_file)

@@ -192,14 +192,12 @@ class DeepSense(tf.keras.Model):
         sensor = self.sensor_act3(sensor)
         sensor = self.sensor_dropout3(sensor) if training else sensor
 
-        # sensor = tf.transpose(sensor, perm=(0, 2, 1, 3, 4))
-        # sensor = self.sensor_reshape(sensor)
-        #
-        # sensor = self.sensor_stacked_rnn_dropout(sensor) if training else self.sensor_stacked_rnn(sensor)
-        #
-        # sensor = tf.math.reduce_mean(sensor, axis=1, keepdims=False)
+        sensor = tf.transpose(sensor, perm=(0, 2, 1, 3, 4))
+        sensor = self.sensor_reshape(sensor)
 
-        sensor = Flatten()(sensor)
+        sensor = self.sensor_stacked_rnn_dropout(sensor) if training else self.sensor_stacked_rnn(sensor)
+
+        sensor = tf.math.reduce_mean(sensor, axis=1, keepdims=False)
 
         sensor = self.fc(sensor)
 
@@ -222,7 +220,7 @@ def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, in
     model.compile(optimizer=optimizer, loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
                   metrics=['accuracy', tf.keras.metrics.TrueNegatives(name='tn'), tf.keras.metrics.FalsePositives(name='fp'),
                            tf.keras.metrics.FalseNegatives(name='fn'), tf.keras.metrics.TruePositives(name='tp'),
-                           tf.keras.metrics.AUC(curve='PR', from_logits=False)])
+                           ])
 
     latest = tf.train.latest_checkpoint(os.path.dirname(checkpoint_dir))
     try:
@@ -285,11 +283,12 @@ if __name__ == '__main__':
     fourier = True
     fft_window = 8
     image_width = 20
+    class_counts_file = 'class_counts.csv'
 
     if fourier:
         input_shape = (None, fft_window, image_width, 3, 2)
     else:
         input_shape = (None, 4, int(bucket_size / 4), 8)
 
-    train_ds, val_ds, test_ds, class_weight = load_data(dir, target_region, batch_size, input_shape, fourier)
+    train_ds, val_ds, test_ds, class_weight = load_data(dir, target_region, input_shape, batch_size, fourier, class_counts_file)
     train(train_ds, val_ds, test_ds, class_weight, num_epochs, patience, input_shape, fourier, checkpoint_dir)

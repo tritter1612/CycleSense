@@ -1,6 +1,7 @@
 import os
 import glob
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 
 input_shape_global = None
@@ -18,9 +19,7 @@ def pack_features_vector(features, labels):
 
 
 def data_gen(dir, split, target_region):
-
     with np.load(os.path.join(dir, split, target_region)) as data:
-
         for file in data.files:
             x = data[file][:, :, :]
             y = tf.cast(data[file][:, :, 8], tf.dtypes.int32)
@@ -30,10 +29,9 @@ def data_gen(dir, split, target_region):
             yield x, y
 
 
-def create_ds(dir, target_region, split, batch_size=32, fourier=True, count=False):
+def create_ds(dir, target_region, split, batch_size=32, fourier=True, count=False,
+              class_counts_file='class_counts.csv'):
     if fourier:
-
-        pos_counter, neg_counter, len = 0, 0, 0
 
         ds = tf.data.Dataset.from_generator(data_gen, args=[dir, split, target_region + '.npz'],
                                             output_signature=(
@@ -45,12 +43,11 @@ def create_ds(dir, target_region, split, batch_size=32, fourier=True, count=Fals
         ds = ds.prefetch(1)
 
         if count:
-            for _, y in ds:
-                len += y.shape[0]
-                pos_counter += tf.math.reduce_sum(y).numpy()
-            neg_counter = neg_counter + len - pos_counter
+            class_counts_df = pd.read_csv(class_counts_file)
+            pos_counter, neg_counter = class_counts_df[split + '_' + target_region]
 
     else:
+
 
         pos_counter = float(len(glob.glob(os.path.join(dir, split, target_region, '*_bucket_incident.csv'))))
         neg_counter = float(len(glob.glob(os.path.join(dir, split, target_region, '*_bucket.csv'))))
@@ -73,13 +70,14 @@ def create_ds(dir, target_region, split, batch_size=32, fourier=True, count=Fals
         return ds
 
 
-def load_data(dir, target_region, batch_size=32, input_shape=(None, 4, 11, 8), fourier=True):
+def load_data(dir, target_region, input_shape=(None, 4, 11, 8), batch_size=32, fourier=True,
+              class_counts_file='class_counts.csv'):
     global input_shape_global
     input_shape_global = input_shape
 
-    train_ds, pos_train_counter, neg_train_counter = create_ds(dir, target_region, 'train', batch_size, fourier, True)
-    val_ds = create_ds(dir, target_region, 'val', batch_size, fourier, False)
-    test_ds = create_ds(dir, target_region, 'test', batch_size, fourier, False)
+    train_ds, pos_train_counter, neg_train_counter = create_ds(dir, target_region, 'train', batch_size, fourier, True, class_counts_file)
+    val_ds = create_ds(dir, target_region, 'val', batch_size, fourier, False, class_counts_file)
+    test_ds = create_ds(dir, target_region, 'test', batch_size, fourier, False, class_counts_file)
 
     weight_for_0 = (1 / neg_train_counter) * ((pos_train_counter + neg_train_counter) / 2.0)
     weight_for_1 = (1 / pos_train_counter) * ((pos_train_counter + neg_train_counter) / 2.0)
