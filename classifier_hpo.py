@@ -1,9 +1,12 @@
 import os
+from datetime import datetime
 import tensorflow as tf
-from tensorflow.keras.layers import Dense, Lambda, Flatten, Conv1D, MaxPooling1D, Dropout, TimeDistributed, LSTM, ConvLSTM2D, Conv3D, BatchNormalization, ReLU, Reshape, GRUCell, RNN, StackedRNNCells
+from tensorflow.keras.layers import Dense, Lambda, Flatten, Conv1D, MaxPooling1D, Dropout, TimeDistributed, LSTM, \
+    ConvLSTM2D, Conv3D, BatchNormalization, ReLU, Reshape, GRUCell, RNN, StackedRNNCells
 from tensorboard.plugins.hparams import api as hp
 
 from data_loader import load_data
+from metrics import TSS
 
 
 class DeepSense(tf.keras.Model):
@@ -82,16 +85,17 @@ class DeepSense(tf.keras.Model):
             self.sensor_gru1_dropout = GRUCell(hparams[HP_RNN_UNITS], dropout=hparams[HP_DROPOUT_L12], activation=None)
             self.sensor_gru2_dropout = GRUCell(hparams[HP_RNN_UNITS], dropout=hparams[HP_DROPOUT_L13], activation=None)
             self.sensor_rnn_dropout = RNN(StackedRNNCells([self.sensor_gru1_dropout, self.sensor_gru2_dropout]),
-                                                  return_sequences=True)
+                                          return_sequences=True)
 
         elif hparams[HP_RNN_CELL_TYPE] == 'LSTM':
 
             self.sensor_rnn = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True)
-            self.sensor_rnn_dropout = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L12])
+            self.sensor_rnn_dropout = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True,
+                                           dropout=hparams[HP_DROPOUT_L12])
 
         elif hparams[HP_RNN_CELL_TYPE] == 'None':
 
-            self.sensor_rnn = Lambda((lambda x : x))
+            self.sensor_rnn = Lambda((lambda x: x))
             self.sensor_rnn_dropout = Dropout(hparams[HP_DROPOUT_L12])
 
         self.flatten = Flatten()
@@ -208,52 +212,72 @@ class DeepSense(tf.keras.Model):
         return sensor
 
 
-def train(run_dir, hparams, train_ds, val_ds, class_weight, input_shape, auc, num_epochs=10, patience=1, checkpoint_dir='checkpoints/cnn/training'):
+def train(run_dir, hparams, train_ds, val_ds, class_weight, input_shape, tn, fp, fn, tp, auc, tss, num_epochs=10,
+          patience=1):
+    tf.keras.backend.clear_session()
     model = DeepSense(hparams, input_shape)
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=hparams[HP_LR])
-    model.compile(optimizer=optimizer, loss=tf.keras.losses.BinaryCrossentropy(from_logits=False), metrics=['accuracy', auc])
+    model.compile(optimizer=optimizer, loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
+                  metrics=['accuracy', tn, fp, fn, tp, auc, tss])
 
     # Create a callback for early stopping
     es_callback = tf.keras.callbacks.EarlyStopping(
-        monitor='val_auc',
+        monitor='val_tss',
         patience=patience,
         verbose=1,
-        mode='max',
+        mode='min',
         restore_best_weights=True)
-
-    tb_callback = tf.keras.callbacks.TensorBoard(log_dir=run_dir, histogram_freq=1)
 
     with tf.summary.create_file_writer(run_dir).as_default():
         hp.hparams(hparams)  # record the values used in this trial
 
-        model.fit(train_ds, validation_data=val_ds, epochs=num_epochs, callbacks=[es_callback], class_weight=class_weight)
+        hist = model.fit(train_ds, validation_data=val_ds, epochs=num_epochs, callbacks=[es_callback],
+                         class_weight=class_weight)
 
-        auc = model.evaluate(val_ds)[2]
+        eval_res = model.evaluate(val_ds)
 
-        tf.summary.scalar(METRIC_AUC, auc, step=1)
+        tn, fp, fn, tp = eval_res[2], eval_res[3], eval_res[4], eval_res[5]
+        auc = eval_res[6]
+        tss = eval_res[7]
+
+        tf.summary.scalar(METRIC_TN, tn, step=len(hist.history['loss']))
+        tf.summary.scalar(METRIC_FP, fp, step=len(hist.history['loss']))
+        tf.summary.scalar(METRIC_FN, fn, step=len(hist.history['loss']))
+        tf.summary.scalar(METRIC_TP, tp, step=len(hist.history['loss']))
+        tf.summary.scalar(METRIC_AUC, auc, step=len(hist.history['loss']))
+        tf.summary.scalar(METRIC_TSS, tss, step=len(hist.history['loss']))
 
 
 if __name__ == '__main__':
     dir = '../Ride_Data'
     checkpoint_dir = 'checkpoints/cnn/training'
     target_region = 'Berlin'
+    hparam_logs = 'logs/hparam_tuning'
+    class_counts_file = os.path.join(dir, 'class_counts.csv')
     bucket_size = 100
     batch_size = 128
-    num_epochs = 10
-    patience = 1
+    num_epochs = 1000
+    patience = 5
+    in_memory = False
     fourier = True
     fft_window = 8
     image_width = 20
     hpo_epochs = 100
-    auc = tf.keras.metrics.AUC(from_logits=False)
+    tn = tf.keras.metrics.TrueNegatives(name='tn')
+    fp = tf.keras.metrics.FalsePositives(name='fp')
+    fn = tf.keras.metrics.FalseNegatives(name='fn')
+    tp = tf.keras.metrics.TruePositives(name='tp')
+    auc = tf.keras.metrics.AUC(curve='PR', from_logits=False)
+    tss = TSS()
 
     if fourier:
         input_shape = (None, fft_window, image_width, 3, 2)
     else:
         input_shape = (None, 4, int(bucket_size / 4), 8)
 
-    train_ds, val_ds, test_ds, class_weight = load_data(dir, target_region, batch_size, input_shape, fourier)
+    train_ds, val_ds, test_ds, class_weight = load_data(dir, target_region, input_shape, batch_size, in_memory, fourier,
+                                                        class_counts_file)
 
     HP_NUM_KERNELS_L1 = hp.HParam('num_kernels_l1', hp.Discrete([8, 16, 32, 64, 128]))
     HP_NUM_KERNELS_L2 = hp.HParam('num_kernels_l2', hp.Discrete([8, 16, 32, 64, 128]))
@@ -286,15 +310,22 @@ if __name__ == '__main__':
     HP_IMAG = hp.HParam('imag', hp.Discrete([True, False]))
     HP_LR = hp.HParam('learning_rate', hp.Discrete([0.01, 0.001, 0.0001]))
 
+    METRIC_TN = 'val_tn'
+    METRIC_FP = 'val_fp'
+    METRIC_FN = 'val_fn'
+    METRIC_TP = 'val_tp'
     METRIC_AUC = 'val_auc'
+    METRIC_TSS = 'val_tss'
 
-    with tf.summary.create_file_writer('logs/hparam_tuning').as_default():
+    with tf.summary.create_file_writer(hparam_logs).as_default():
         hp.hparams_config(
             hparams=[HP_NUM_KERNELS_L1, HP_NUM_KERNELS_L2, HP_NUM_KERNELS_L3, HP_NUM_KERNELS_L4, HP_NUM_KERNELS_L5,
                      HP_NUM_KERNELS_L6, HP_DROPOUT_L1, HP_DROPOUT_L2, HP_DROPOUT_L3, HP_DROPOUT_L4,
                      HP_DROPOUT_L5, HP_DROPOUT_L6, HP_DROPOUT_L7, HP_DROPOUT_L8, HP_DROPOUT_L9, HP_DROPOUT_L10,
                      HP_DROPOUT_L11, HP_DROPOUT_L12, HP_DROPOUT_L13, HP_RNN_UNITS, HP_RNN_CELL_TYPE, HP_IMAG, HP_LR],
-            metrics=[hp.Metric(METRIC_AUC, display_name='val_auc')],
+            metrics=[hp.Metric(METRIC_TN, display_name='val_tn'), hp.Metric(METRIC_FP, display_name='val_fp'),
+                     hp.Metric(METRIC_FN, display_name='val_fn'), hp.Metric(METRIC_TP, display_name='val_tp'),
+                     hp.Metric(METRIC_AUC, display_name='val_auc')],
         )
 
     session_num = 0
@@ -326,14 +357,10 @@ if __name__ == '__main__':
             HP_LR: HP_LR.domain.sample_uniform(),
         }
 
-        try:
-            os.rmdir(checkpoint_dir)
-        except:
-            pass
-
         print('')
         run_name = "run-%d" % session_num
         print('--- Starting trial: %s' % run_name)
         print({h.name: hparams[h] for h in hparams})
-        train('logs/hparam_tuning/' + run_name, hparams, train_ds, val_ds, class_weight, input_shape, auc, num_epochs, patience, checkpoint_dir)
+        train(hparam_logs + '_' + datetime.now().strftime('%Y%m%d-%H%M%S') + '_' + run_name, hparams, train_ds, val_ds,
+              class_weight, input_shape, tn, fp, fn, tp, auc, tss, num_epochs, patience)
         session_num += 1
