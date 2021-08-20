@@ -280,6 +280,7 @@ if __name__ == '__main__':
     target_region = 'Berlin'
     bucket_size = 100
     batch_size = 128
+    in_memory = False
     num_epochs = 100
     patience = 10
     fourier = True
@@ -292,5 +293,5 @@ if __name__ == '__main__':
     else:
         input_shape = (None, 4, int(bucket_size / 4), 8)
 
-    train_ds, val_ds, test_ds, class_weight = load_data(dir, target_region, input_shape, batch_size, fourier, class_counts_file)
+    train_ds, val_ds, test_ds, class_weight = load_data(dir, target_region, input_shape, batch_size, in_memory, fourier, class_counts_file)
     train(train_ds, val_ds, test_ds, class_weight, num_epochs, patience, input_shape, fourier, checkpoint_dir)

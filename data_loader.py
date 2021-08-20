@@ -29,8 +29,9 @@ def data_gen(dir, split, target_region):
             yield x, y
 
 
-def create_ds(dir, target_region, split, batch_size=32, fourier=True, count=False,
+def create_ds(dir, target_region, split, batch_size=32, in_memory=False, fourier=True, count=False,
               class_counts_file='class_counts.csv'):
+
     if fourier:
 
         ds = tf.data.Dataset.from_generator(data_gen, args=[dir, split, target_region + '.npz'],
@@ -40,7 +41,7 @@ def create_ds(dir, target_region, split, batch_size=32, fourier=True, count=Fals
                                             ))
 
         ds = ds.batch(batch_size, num_parallel_calls=tf.data.AUTOTUNE, deterministic=True)
-        ds = ds.prefetch(1)
+        ds = ds.cache().prefetch(1) if in_memory else ds.prefetch(1)
 
         if count:
             class_counts_df = pd.read_csv(class_counts_file)
@@ -48,6 +49,8 @@ def create_ds(dir, target_region, split, batch_size=32, fourier=True, count=Fals
 
     else:
 
+        if not in_memory and split == 'train':
+            print('if fourier is False data is always processed in_memory')
 
         pos_counter = float(len(glob.glob(os.path.join(dir, split, target_region, '*_bucket_incident.csv'))))
         neg_counter = float(len(glob.glob(os.path.join(dir, split, target_region, '*_bucket.csv'))))
@@ -70,14 +73,14 @@ def create_ds(dir, target_region, split, batch_size=32, fourier=True, count=Fals
         return ds
 
 
-def load_data(dir, target_region, input_shape=(None, 4, 11, 8), batch_size=32, fourier=True,
+def load_data(dir, target_region, input_shape=(None, 4, 11, 8), batch_size=32, in_memory=False, fourier=True,
               class_counts_file='class_counts.csv'):
     global input_shape_global
     input_shape_global = input_shape
 
-    train_ds, pos_train_counter, neg_train_counter = create_ds(dir, target_region, 'train', batch_size, fourier, True, class_counts_file)
-    val_ds = create_ds(dir, target_region, 'val', batch_size, fourier, False, class_counts_file)
-    test_ds = create_ds(dir, target_region, 'test', batch_size, fourier, False, class_counts_file)
+    train_ds, pos_train_counter, neg_train_counter = create_ds(dir, target_region, 'train', batch_size, in_memory, fourier, True, class_counts_file)
+    val_ds = create_ds(dir, target_region, 'val', batch_size, in_memory, fourier, False, class_counts_file)
+    test_ds = create_ds(dir, target_region, 'test', batch_size, False, fourier, False, class_counts_file)
 
     weight_for_0 = (1 / neg_train_counter) * ((pos_train_counter + neg_train_counter) / 2.0)
     weight_for_1 = (1 / pos_train_counter) * ((pos_train_counter + neg_train_counter) / 2.0)
