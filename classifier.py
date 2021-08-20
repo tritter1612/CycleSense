@@ -7,6 +7,7 @@ from tensorflow.keras.layers import Dense, Flatten, Conv1D, Conv2D, Conv3D, RNN,
 from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score
 
 from data_loader import load_data
+from metrics import TSS
 
 
 class CNN_LSTM_(tf.keras.models.Sequential):
@@ -220,6 +221,7 @@ def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, in
     model.compile(optimizer=optimizer, loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
                   metrics=['accuracy', tf.keras.metrics.TrueNegatives(name='tn'), tf.keras.metrics.FalsePositives(name='fp'),
                            tf.keras.metrics.FalseNegatives(name='fn'), tf.keras.metrics.TruePositives(name='tp'),
+                           tf.keras.metrics.AUC(curve='PR', from_logits=False), TSS()
                            ])
 
     latest = tf.train.latest_checkpoint(os.path.dirname(checkpoint_dir))
@@ -283,7 +285,7 @@ if __name__ == '__main__':
     fourier = True
     fft_window = 8
     image_width = 20
-    class_counts_file = 'class_counts.csv'
+    class_counts_file = os.path.join(dir, 'class_counts.csv')
 
     if fourier:
         input_shape = (None, fft_window, image_width, 3, 2)
