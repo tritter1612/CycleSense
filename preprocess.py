@@ -481,10 +481,10 @@ def create_buckets(dir, target_region=None, bucket_size=22, fourier=False, fft_w
 
                                 if np.any(ride_image_transformed[:, :, 8]) > 0:
                                     ride_image_transformed[:, :, 8] = 1  # TODO: preserve incident type
-                                    dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(5) + '_bucket_incident.csv'
+                                    dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(5) + '_bucket_incident'
                                 else:
                                     ride_image_transformed[:, :, 8] = 0
-                                    dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(5) + '_bucket.csv'
+                                    dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(5) + '_bucket'
 
                                 ride_images_dict.update({dict_name : ride_image_transformed})
 
