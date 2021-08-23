@@ -37,7 +37,7 @@ def create_ds(dir, target_region, split, batch_size=32, in_memory=False, fourier
 
         ds = tf.data.Dataset.from_generator(data_gen, args=[dir, split, target_region + '.npz'],
                                             output_signature=(
-                                                tf.TensorSpec(shape=(8, 20, 9), dtype=tf.complex64),
+                                                tf.TensorSpec(shape=(input_shape_global[1], input_shape_global[2], 9), dtype=tf.complex64),
                                                 tf.TensorSpec(shape=(), dtype=tf.int32)
                                             ))
 
