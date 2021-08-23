@@ -3,6 +3,7 @@ import glob
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import warnings
 
 input_shape_global = None
 
@@ -50,7 +51,7 @@ def create_ds(dir, target_region, split, batch_size=32, in_memory=False, fourier
     else:
 
         if not in_memory and split == 'train':
-            print('if fourier is False data is always processed in_memory')
+            warnings.warn('if deepsense is False data is always processed in_memory')
 
         pos_counter = float(len(glob.glob(os.path.join(dir, split, target_region, '*_bucket_incident.csv'))))
         neg_counter = float(len(glob.glob(os.path.join(dir, split, target_region, '*_bucket.csv'))))
