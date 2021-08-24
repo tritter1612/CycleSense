@@ -1,5 +1,9 @@
 import os
+import glob
 from datetime import datetime
+import numpy as np
+import pandas as pd
+from tqdm.auto import tqdm
 import tensorflow as tf
 from tensorflow.keras.layers import Dense, Lambda, Flatten, Conv1D, MaxPooling1D, Dropout, TimeDistributed, LSTM, \
     ConvLSTM2D, Conv3D, BatchNormalization, ReLU, Reshape, GRUCell, RNN, StackedRNNCells
@@ -7,6 +11,109 @@ from tensorboard.plugins.hparams import api as hp
 
 from data_loader import load_data
 from metrics import TSS
+
+
+def create_buckets(dir, hparams, tmp_dir, target_region=None, bucket_size=22, deepsense=False, class_counts_file='class_counts.csv'):
+
+    image_width = 100 // hparams[HP_FFT_WINDOW]
+
+    try:
+        os.mkdir(tmp_dir)
+        os.mkdir(os.path.join(tmp_dir, 'train'))
+        os.mkdir(os.path.join(tmp_dir, 'test'))
+        os.mkdir(os.path.join(tmp_dir, 'val'))
+    except:
+        pass
+
+    class_counts_df = pd.DataFrame()
+
+    for split in ['train', 'test', 'val']:
+
+        for subdir in glob.glob(os.path.join(dir, split, '[!.]*')):
+            region = os.path.basename(subdir)
+
+            if target_region is not None and target_region != region:
+                continue
+
+            file_list = glob.glob(os.path.join(subdir, 'VM2_*.csv'))
+
+            ride_images_dict = {}
+
+            pos_counter, neg_counter = 0, 0
+
+            if deepsense:
+
+                for file in tqdm(file_list, desc='generate buckets for {} data'.format(split)):
+
+                    arr = np.genfromtxt(file, delimiter=',', skip_header=True)
+
+                    lat = arr[:, 0]
+                    lat = lat[:, np.newaxis]
+                    lon = arr[:, 1]
+                    lon = lon[:, np.newaxis]
+                    incident = arr[:, -1]
+                    incident = incident[:, np.newaxis]
+
+                    # remove lat, lon
+                    arr = arr[:, 2:]
+
+                    # remove incident
+                    arr = arr[:, :-1]
+
+                    # remove timestamp
+                    arr = np.concatenate((arr[:, :3], arr[:, 4:]), axis=1)
+
+                    n_window_splits = arr.shape[0] // hparams[HP_FFT_WINDOW]
+                    window_split_range = n_window_splits * hparams[HP_FFT_WINDOW]
+
+                    if n_window_splits > 0:
+
+                        ride_images = np.stack(np.vsplit(arr[:window_split_range], n_window_splits), axis=1)
+                        lat = np.stack(np.vsplit(lat[:window_split_range], n_window_splits), axis=1)
+                        lon = np.stack(np.vsplit(lon[:window_split_range], n_window_splits), axis=1)
+                        incident = np.stack(np.vsplit(incident[:window_split_range], n_window_splits), axis=1)
+
+                        n_image_splits = n_window_splits // image_width
+                        image_split_range = n_image_splits * image_width
+
+                        if n_image_splits > 0:
+                            ride_image_list = np.array_split(ride_images[:, :image_split_range, :], n_image_splits,
+                                                             axis=1)
+                            lat = np.array_split(lat[:, :image_split_range, :], n_image_splits, axis=1)
+                            lon = np.array_split(lon[:, :image_split_range, :], n_image_splits, axis=1)
+                            incident = np.array_split(incident[:, :image_split_range, :], n_image_splits, axis=1)
+
+                            for i, ride_image in enumerate(ride_image_list):
+                                # apply fourier transformation to data
+
+                                if hparams[HP_FOURIER]:
+                                    ride_image_transformed = np.fft.fft(ride_image, axis=0)
+                                else:
+                                    ride_image_transformed = ride_image
+
+                                # append lat, lon & incident
+                                ride_image_transformed = np.dstack(
+                                    (ride_image_transformed, lat[i], lon[i], incident[i]))
+
+                                if np.any(ride_image_transformed[:, :, 8]) > 0:
+                                    ride_image_transformed[:, :, 8] = 1  # TODO: preserve incident type
+                                    dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(5) + '_bucket_incident'
+                                    pos_counter += 1
+                                else:
+                                    ride_image_transformed[:, :, 8] = 0
+                                    dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(5) + '_bucket'
+                                    neg_counter += 1
+
+                                ride_images_dict.update({dict_name : ride_image_transformed})
+
+                    class_counts_df[split + '_' + region] = [pos_counter, neg_counter]
+
+                class_counts_df.to_csv(os.path.join(tmp_dir, class_counts_file), ',', index=False)
+
+                np.savez(os.path.join(tmp_dir, split, region + '.npz'), **ride_images_dict)
+
+            else:
+                return
 
 
 class DeepSense(tf.keras.Model):
@@ -264,6 +371,7 @@ def train(run_dir, hparams, train_ds, val_ds, class_weight, input_shape, tn, fp,
 if __name__ == '__main__':
     dir = '../Ride_Data'
     checkpoint_dir = 'checkpoints/cnn/training'
+    tmp_dir = 'tmp_dir'
     target_region = 'Berlin'
     hparam_logs = 'logs/hparam_tuning'
     class_counts_file = 'class_counts.csv'
@@ -273,8 +381,6 @@ if __name__ == '__main__':
     patience = 5
     in_memory = False
     deepsense = True
-    fft_window = 8
-    image_width = 20
     hpo_epochs = 100
     tn = tf.keras.metrics.TrueNegatives(name='tn')
     fp = tf.keras.metrics.FalsePositives(name='fp')
@@ -284,14 +390,8 @@ if __name__ == '__main__':
     tss = TSS()
     sas = tf.keras.metrics.SensitivityAtSpecificity(0.96, name='sas')
 
-    if deepsense:
-        input_shape = (None, fft_window, image_width, 3, 2)
-    else:
-        input_shape = (None, 4, int(bucket_size / 4), 8)
-
-    train_ds, val_ds, test_ds, class_weight = load_data(dir, target_region, input_shape, batch_size, in_memory, fourier,
-                                                        class_counts_file)
-
+    HP_FFT_WINDOW = hp.HParam('fft_window', hp.Discrete([5, 10, 20]))
+    HP_FOURIER = hp.HParam('fourier', hp.Discrete([True, False]))
     HP_NUM_KERNELS_L1 = hp.HParam('num_kernels_l1', hp.Discrete([8, 16, 32, 64, 128]))
     HP_NUM_KERNELS_L2 = hp.HParam('num_kernels_l2', hp.Discrete([8, 16, 32, 64, 128]))
     HP_NUM_KERNELS_L3 = hp.HParam('num_kernels_l3', hp.Discrete([8, 16, 32, 64, 128]))
@@ -333,7 +433,8 @@ if __name__ == '__main__':
 
     with tf.summary.create_file_writer(hparam_logs).as_default():
         hp.hparams_config(
-            hparams=[HP_NUM_KERNELS_L1, HP_NUM_KERNELS_L2, HP_NUM_KERNELS_L3, HP_NUM_KERNELS_L4, HP_NUM_KERNELS_L5,
+            hparams=[HP_FFT_WINDOW, HP_FOURIER,
+                     HP_NUM_KERNELS_L1, HP_NUM_KERNELS_L2, HP_NUM_KERNELS_L3, HP_NUM_KERNELS_L4, HP_NUM_KERNELS_L5,
                      HP_NUM_KERNELS_L6, HP_DROPOUT_L1, HP_DROPOUT_L2, HP_DROPOUT_L3, HP_DROPOUT_L4,
                      HP_DROPOUT_L5, HP_DROPOUT_L6, HP_DROPOUT_L7, HP_DROPOUT_L8, HP_DROPOUT_L9, HP_DROPOUT_L10,
                      HP_DROPOUT_L11, HP_DROPOUT_L12, HP_DROPOUT_L13, HP_RNN_UNITS, HP_RNN_CELL_TYPE, HP_IMAG, HP_LR],
@@ -347,6 +448,8 @@ if __name__ == '__main__':
 
     for i in range(hpo_epochs):
         hparams = {
+            HP_FFT_WINDOW: HP_FFT_WINDOW.domain.sample_uniform(),
+            HP_FOURIER: HP_FOURIER.domain.sample_uniform(),
             HP_NUM_KERNELS_L1: HP_NUM_KERNELS_L1.domain.sample_uniform(),
             HP_NUM_KERNELS_L2: HP_NUM_KERNELS_L2.domain.sample_uniform(),
             HP_NUM_KERNELS_L3: HP_NUM_KERNELS_L3.domain.sample_uniform(),
@@ -368,7 +471,7 @@ if __name__ == '__main__':
             HP_DROPOUT_L13: HP_DROPOUT_L13.domain.sample_uniform(),
             HP_RNN_UNITS: HP_RNN_UNITS.domain.sample_uniform(),
             HP_RNN_CELL_TYPE: HP_RNN_CELL_TYPE.domain.sample_uniform(),
-            HP_IMAG: HP_IMAG.domain.sample_uniform(),
+            HP_IMAG: HP_IMAG.domain.sample_uniform() if HP_FOURIER else False,
             HP_LR: HP_LR.domain.sample_uniform(),
         }
 
@@ -376,6 +479,23 @@ if __name__ == '__main__':
         run_name = "run-%d" % session_num
         print('--- Starting trial: %s' % run_name)
         print({h.name: hparams[h] for h in hparams})
+
+        image_width = 100 // hparams[HP_FFT_WINDOW]
+
+        if deepsense:
+            input_shape = (None, hparams[HP_FFT_WINDOW], image_width, 3, 2)
+        else:
+            input_shape = (None, 4, int(bucket_size / 4), 8)
+
+        create_buckets(dir, hparams, tmp_dir, target_region, bucket_size, deepsense, class_counts_file)
+        train_ds, val_ds, test_ds, class_weight = load_data(tmp_dir, target_region, input_shape, batch_size, in_memory, deepsense, os.path.join(tmp_dir, class_counts_file))
+
         train(hparam_logs + '_' + datetime.now().strftime('%Y%m%d-%H%M%S') + '_' + run_name, hparams, train_ds, val_ds,
-              class_weight, input_shape, tn, fp, fn, tp, auc, tss, num_epochs, patience)
+              class_weight, input_shape, tn, fp, fn, tp, auc, tss, sas, num_epochs, patience)
+
+        os.remove(os.path.join(tmp_dir, 'train', target_region + '.npz'))
+        os.remove(os.path.join(tmp_dir, 'val', target_region + '.npz'))
+        os.remove(os.path.join(tmp_dir, 'test', target_region + '.npz'))
+        os.remove(os.path.join(tmp_dir, class_counts_file))
+
         session_num += 1
