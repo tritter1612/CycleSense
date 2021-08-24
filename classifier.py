@@ -206,10 +206,10 @@ class DeepSense(tf.keras.Model):
 
 
 def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, input_shape=(None, 8, 20, 3, 2),
-          fourier=True, checkpoint_dir='checkpoints/cnn/training'):
+          deepsense=True, checkpoint_dir='checkpoints/cnn/training'):
     initial_bias = np.log(class_weight[0] / class_weight[1])
 
-    if fourier:
+    if deepsense:
         model = DeepSense(input_shape, initial_bias)
 
     else:
@@ -221,7 +221,7 @@ def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, in
     model.compile(optimizer=optimizer, loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
                   metrics=['accuracy', tf.keras.metrics.TrueNegatives(name='tn'), tf.keras.metrics.FalsePositives(name='fp'),
                            tf.keras.metrics.FalseNegatives(name='fn'), tf.keras.metrics.TruePositives(name='tp'),
-                           tf.keras.metrics.AUC(curve='PR', from_logits=False), TSS()
+                           tf.keras.metrics.AUC(curve='PR', from_logits=False), TSS(), tf.keras.metrics.SensitivityAtSpecificity(0.96, name='sas')
                            ])
 
     latest = tf.train.latest_checkpoint(os.path.dirname(checkpoint_dir))
@@ -233,7 +233,7 @@ def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, in
     # Create a callback that saves the model's weights
     cp_callback = tf.keras.callbacks.ModelCheckpoint(
         filepath=checkpoint_dir,
-        monitor='val_tss',
+        monitor='val_auc',
         verbose=1,
         save_best_only=True,
         mode='max',
@@ -242,7 +242,7 @@ def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, in
 
     # Create a callback for early stopping
     es_callback = tf.keras.callbacks.EarlyStopping(
-        monitor='val_tss',
+        monitor='val_auc',
         patience=patience,
         verbose=1,
         mode='max',
@@ -283,15 +283,16 @@ if __name__ == '__main__':
     in_memory = False
     num_epochs = 100
     patience = 10
-    fourier = True
+    deepsense = True
     fft_window = 8
     image_width = 20
     class_counts_file = os.path.join(dir, 'class_counts.csv')
 
-    if fourier:
+    if deepsense:
         input_shape = (None, fft_window, image_width, 3, 2)
     else:
         input_shape = (None, 4, int(bucket_size / 4), 8)
 
-    train_ds, val_ds, test_ds, class_weight = load_data(dir, target_region, input_shape, batch_size, in_memory, fourier, class_counts_file)
-    train(train_ds, val_ds, test_ds, class_weight, num_epochs, patience, input_shape, fourier, checkpoint_dir)
+
+    train_ds, val_ds, test_ds, class_weight = load_data(dir, target_region, input_shape, batch_size, in_memory, deepsense, class_counts_file)
+    train(train_ds, val_ds, test_ds, class_weight, num_epochs, patience, input_shape, deepsense, checkpoint_dir)

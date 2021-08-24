@@ -74,7 +74,7 @@ class DeepSense(tf.keras.Model):
         self.sensor_act3 = ReLU()
         self.sensor_dropout3 = Dropout(hparams[HP_DROPOUT_L11])
 
-        self.sensor_reshape = Reshape((6, 18 * 3 * hparams[HP_NUM_KERNELS_L6]))
+        self.sensor_reshape = Reshape((input_shape[2] - 2, (input_shape[1] - 2) *  3 * hparams[HP_NUM_KERNELS_L6]))
 
         if hparams[HP_RNN_CELL_TYPE] == 'stacked_RNN':
 
@@ -212,18 +212,18 @@ class DeepSense(tf.keras.Model):
         return sensor
 
 
-def train(run_dir, hparams, train_ds, val_ds, class_weight, input_shape, tn, fp, fn, tp, auc, tss, num_epochs=10,
+def train(run_dir, hparams, train_ds, val_ds, class_weight, input_shape, tn, fp, fn, tp, auc, tss, sas, num_epochs=10,
           patience=1):
     tf.keras.backend.clear_session()
     model = DeepSense(hparams, input_shape)
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=hparams[HP_LR])
     model.compile(optimizer=optimizer, loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
-                  metrics=['accuracy', tn, fp, fn, tp, auc, tss])
+                  metrics=['accuracy', tn, fp, fn, tp, auc, tss, sas])
 
     # Create a callback for early stopping
     es_callback = tf.keras.callbacks.EarlyStopping(
-        monitor='val_tss',
+        monitor='val_auc',
         patience=patience,
         verbose=1,
         mode='min',
@@ -240,13 +240,17 @@ def train(run_dir, hparams, train_ds, val_ds, class_weight, input_shape, tn, fp,
         tn, fp, fn, tp = eval_res[2], eval_res[3], eval_res[4], eval_res[5]
         auc = eval_res[6]
         tss = eval_res[7]
+        sas = eval_res[8]
 
-        tf.summary.scalar(METRIC_TN, tn, step=len(hist.history['loss']))
-        tf.summary.scalar(METRIC_FP, fp, step=len(hist.history['loss']))
-        tf.summary.scalar(METRIC_FN, fn, step=len(hist.history['loss']))
-        tf.summary.scalar(METRIC_TP, tp, step=len(hist.history['loss']))
-        tf.summary.scalar(METRIC_AUC, auc, step=len(hist.history['loss']))
-        tf.summary.scalar(METRIC_TSS, tss, step=len(hist.history['loss']))
+        step = len(hist.history['loss'])
+
+        tf.summary.scalar(METRIC_TN, tn, step=step)
+        tf.summary.scalar(METRIC_FP, fp, step=step)
+        tf.summary.scalar(METRIC_FN, fn, step=step)
+        tf.summary.scalar(METRIC_TP, tp, step=step)
+        tf.summary.scalar(METRIC_AUC, auc, step=step)
+        tf.summary.scalar(METRIC_TSS, tss, step=step)
+        tf.summary.scalar(METRIC_SAS, sas, step=step)
 
 
 if __name__ == '__main__':
@@ -270,6 +274,7 @@ if __name__ == '__main__':
     tp = tf.keras.metrics.TruePositives(name='tp')
     auc = tf.keras.metrics.AUC(curve='PR', from_logits=False)
     tss = TSS()
+    sas = tf.keras.metrics.SensitivityAtSpecificity(0.96, name='sas')
 
     if fourier:
         input_shape = (None, fft_window, image_width, 3, 2)
@@ -316,6 +321,7 @@ if __name__ == '__main__':
     METRIC_TP = 'val_tp'
     METRIC_AUC = 'val_auc'
     METRIC_TSS = 'val_tss'
+    METRIC_SAS = 'val_sas'
 
     with tf.summary.create_file_writer(hparam_logs).as_default():
         hp.hparams_config(
@@ -325,7 +331,8 @@ if __name__ == '__main__':
                      HP_DROPOUT_L11, HP_DROPOUT_L12, HP_DROPOUT_L13, HP_RNN_UNITS, HP_RNN_CELL_TYPE, HP_IMAG, HP_LR],
             metrics=[hp.Metric(METRIC_TN, display_name='val_tn'), hp.Metric(METRIC_FP, display_name='val_fp'),
                      hp.Metric(METRIC_FN, display_name='val_fn'), hp.Metric(METRIC_TP, display_name='val_tp'),
-                     hp.Metric(METRIC_AUC, display_name='val_auc')],
+                     hp.Metric(METRIC_AUC, display_name='val_auc'), hp.Metric(METRIC_TSS, display_name='val_tss'),
+                     hp.Metric(METRIC_SAS, display_name='val_sas')],
         )
 
     session_num = 0

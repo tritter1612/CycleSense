@@ -415,7 +415,7 @@ def create_buckets_inner(bucket_size, file):
     os.remove(file)
 
 
-def create_buckets(dir, target_region=None, bucket_size=22, fourier=False, fft_window=8, image_width=20, class_counts_file='class_counts.csv'):
+def create_buckets(dir, target_region=None, bucket_size=22, deepsense=False, fft_window=8, image_width=20, class_counts_file='class_counts.csv'):
 
     class_counts_df = pd.DataFrame()
 
@@ -434,7 +434,7 @@ def create_buckets(dir, target_region=None, bucket_size=22, fourier=False, fft_w
 
             pos_counter, neg_counter = 0, 0
 
-            if fourier:
+            if deepsense:
 
                 for file in file_list:
 
@@ -510,7 +510,7 @@ def create_buckets(dir, target_region=None, bucket_size=22, fourier=False, fft_w
                     pool.map(partial(create_buckets_inner, bucket_size), file_list)
 
 
-def preprocess(dir, target_region=None, bucket_size=100, time_interval=100, interpolation_type='equidistant', fourier=True, fft_window=8, image_width=20, class_counts_file='class_counts.csv'):
+def preprocess(dir, target_region=None, bucket_size=100, time_interval=100, interpolation_type='equidistant', deepsense=True, fft_window=8, image_width=20, class_counts_file='class_counts.csv'):
     remove_invalid_rides(dir, target_region)
     remove_acc_outliers(dir, target_region)
     calc_vel_delta(dir, target_region)
@@ -518,7 +518,7 @@ def preprocess(dir, target_region=None, bucket_size=100, time_interval=100, inte
     remove_vel_outliers(dir, target_region)
     remove_empty_rows(dir, target_region)
     scale(dir, target_region)
-    create_buckets(dir, target_region, bucket_size, fourier, fft_window, image_width, class_counts_file)
+    create_buckets(dir, target_region, bucket_size, deepsense, fft_window, image_width, class_counts_file)
 
 
 if __name__ == '__main__':
@@ -527,8 +527,8 @@ if __name__ == '__main__':
     bucket_size = 100
     time_interval = 100
     interpolation_type = 'equidistant'
-    fourier = True
+    deepsense = True
     fft_window = 8
     image_width = 20
     class_counts_file = 'class_counts.csv'
-    preprocess(dir, target_region, bucket_size, time_interval, interpolation_type, fourier, fft_window, image_width, class_counts_file)
+    preprocess(dir, target_region, bucket_size, time_interval, interpolation_type, deepsense, fft_window, image_width, class_counts_file)

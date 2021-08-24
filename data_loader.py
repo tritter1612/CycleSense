@@ -30,10 +30,10 @@ def data_gen(dir, split, target_region):
             yield x, y
 
 
-def create_ds(dir, target_region, split, batch_size=32, in_memory=False, fourier=True, count=False,
+def create_ds(dir, target_region, split, batch_size=32, in_memory=False, deepsense=True, count=False,
               class_counts_file='class_counts.csv'):
 
-    if fourier:
+    if deepsense:
 
         ds = tf.data.Dataset.from_generator(data_gen, args=[dir, split, target_region + '.npz'],
                                             output_signature=(
@@ -74,14 +74,14 @@ def create_ds(dir, target_region, split, batch_size=32, in_memory=False, fourier
         return ds
 
 
-def load_data(dir, target_region, input_shape=(None, 4, 11, 8), batch_size=32, in_memory=False, fourier=True,
+def load_data(dir, target_region, input_shape=(None, 4, 11, 8), batch_size=32, in_memory=False, deepsense=True,
               class_counts_file='class_counts.csv'):
     global input_shape_global
     input_shape_global = input_shape
 
-    train_ds, pos_train_counter, neg_train_counter = create_ds(dir, target_region, 'train', batch_size, in_memory, fourier, True, class_counts_file)
-    val_ds = create_ds(dir, target_region, 'val', batch_size, in_memory, fourier, False, class_counts_file)
-    test_ds = create_ds(dir, target_region, 'test', batch_size, False, fourier, False, class_counts_file)
+    train_ds, pos_train_counter, neg_train_counter = create_ds(dir, target_region, 'train', batch_size, in_memory, deepsense, True, class_counts_file)
+    val_ds = create_ds(dir, target_region, 'val', batch_size, in_memory, deepsense, False, class_counts_file)
+    test_ds = create_ds(dir, target_region, 'test', batch_size, False, deepsense, False, class_counts_file)
 
     weight_for_0 = (1 / neg_train_counter) * ((pos_train_counter + neg_train_counter) / 2.0)
     weight_for_1 = (1 / pos_train_counter) * ((pos_train_counter + neg_train_counter) / 2.0)
