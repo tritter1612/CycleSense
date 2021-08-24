@@ -6,7 +6,7 @@ import pandas as pd
 from tqdm.auto import tqdm
 import tensorflow as tf
 from tensorflow.keras.layers import Dense, Lambda, Flatten, Conv1D, MaxPooling1D, Dropout, TimeDistributed, LSTM, \
-    ConvLSTM2D, Conv3D, BatchNormalization, ReLU, Reshape, GRUCell, RNN, StackedRNNCells
+    ConvLSTM2D, Conv3D, BatchNormalization, ReLU, Reshape, GRUCell, RNN, StackedRNNCells, add
 from tensorboard.plugins.hparams import api as hp
 
 from data_loader import load_data
@@ -189,7 +189,7 @@ class DeepSense(tf.keras.Model):
 
         self.sensor_shortcut = Conv3D(hparams[HP_NUM_KERNELS_L6], kernel_size=(3, 3, 1), activation=None, padding='same')
 
-        self.sensor_reshape = Reshape((input_shape[2] - 2, (input_shape[1] - 2) *  3 * hparams[HP_NUM_KERNELS_L6]))
+        self.sensor_reshape = Reshape((input_shape[2] - 2, (input_shape[1] - 2) * (2 + hparams[HP_GPS_ACTIVE]) * hparams[HP_NUM_KERNELS_L6]))
 
         if hparams[HP_RNN_CELL_TYPE] == 'stacked_RNN':
 
@@ -245,68 +245,99 @@ class DeepSense(tf.keras.Model):
         # get real part of complex gps data
         gps = tf.math.real(gps)
 
-        acc = self.acc_conv1(acc)
-        acc = self.acc_batch_norm1(acc)
-        acc = self.acc_act1(acc)
-        acc = self.acc_dropout1(acc) if training else acc
+        acc_conv1 = self.acc_conv1(acc)
+        acc_conv1 = self.acc_batch_norm1(acc_conv1)
+        acc_conv1 = self.acc_act1(acc_conv1)
+        acc_conv1 = self.acc_dropout1(acc_conv1) if training else acc_conv1
 
-        acc = self.acc_conv2(acc)
-        acc = self.acc_batch_norm2(acc)
-        acc = self.acc_act2(acc)
-        acc = self.acc_dropout2(acc) if training else acc
+        acc_conv2 = self.acc_conv2(acc_conv1)
+        acc_conv2 = self.acc_batch_norm2(acc_conv2)
+        acc_conv2 = self.acc_act2(acc_conv2)
+        acc_conv2 = self.acc_dropout2(acc_conv2) if training else acc_conv2
 
-        acc = self.acc_conv3(acc)
-        acc = self.acc_batch_norm3(acc)
-        acc = self.acc_act3(acc)
+        acc_conv3 = self.acc_conv3(acc_conv2)
+        acc_conv3 = self.acc_batch_norm3(acc_conv3)
+        acc_conv3 = self.acc_act3(acc_conv3)
 
-        gyro = self.gyro_conv1(gyro)
-        gyro = self.gyro_batch_norm1(gyro)
-        gyro = self.gyro_act1(gyro)
-        gyro = self.gyro_dropout1(gyro) if training else gyro
+        acc_shortcut = self.acc_shortcut(acc)
+        acc_shortcut = self.acc_batch_norm3(acc_shortcut)
+        acc_shortcut = self.acc_act3(acc_shortcut)
 
-        gyro = self.gyro_conv2(gyro)
-        gyro = self.gyro_batch_norm2(gyro)
-        gyro = self.gyro_act2(gyro)
-        gyro = self.gyro_dropout2(gyro) if training else gyro
+        acc = add([acc_conv3, acc_shortcut])
 
-        gyro = self.gyro_conv3(gyro)
-        gyro = self.gyro_batch_norm3(gyro)
-        gyro = self.gyro_act3(gyro)
+        gyro_conv1 = self.gyro_conv1(gyro)
+        gyro_conv1 = self.gyro_batch_norm1(gyro_conv1)
+        gyro_conv1 = self.gyro_act1(gyro_conv1)
+        gyro_conv1 = self.gyro_dropout1(gyro_conv1) if training else gyro_conv1
+
+        gyro_conv2 = self.gyro_conv2(gyro_conv1)
+        gyro_conv2 = self.gyro_batch_norm2(gyro_conv2)
+        gyro_conv2 = self.gyro_act2(gyro_conv2)
+        gyro_conv2 = self.gyro_dropout2(gyro_conv2) if training else gyro_conv2
+
+        gyro_conv3 = self.gyro_conv3(gyro_conv2)
+        gyro_conv3 = self.gyro_batch_norm3(gyro_conv3)
+        gyro_conv3 = self.gyro_act3(gyro_conv3)
+
+        gyro_shortcut = self.gyro_shortcut(gyro)
+        gyro_shortcut = self.gyro_batch_norm3(gyro_shortcut)
+        gyro_shortcut = self.gyro_act3(gyro_shortcut)
+
+        gyro = add([gyro_conv3, gyro_shortcut])
 
         gps = gps[:, :, :, :, tf.newaxis]
 
-        gps = self.gps_conv1(gps)
-        gps = self.gps_batch_norm1(gps)
-        gps = self.gps_act1(gps)
-        gps = self.gps_dropout1(gps) if training else gps
+        if hparams[HP_GPS_ACTIVE]:
 
-        gps = self.gps_conv2(gps)
-        gps = self.gps_batch_norm2(gps)
-        gps = self.gps_act2(gps)
-        gps = self.gps_dropout2(gps) if training else gps
+            gps_conv1 = self.gps_conv1(gps)
+            gps_conv1 = self.gps_batch_norm1(gps_conv1)
+            gps_conv1 = self.gps_act1(gps_conv1)
+            gps_conv1 = self.gps_dropout1(gps_conv1) if training else gps_conv1
 
-        gps = self.gps_conv3(gps)
-        gps = self.gps_batch_norm3(gps)
-        gps = self.gps_act3(gps)
+            gps_conv2 = self.gps_conv2(gps_conv1)
+            gps_conv2 = self.gps_batch_norm2(gps_conv2)
+            gps_conv2 = self.gps_act2(gps_conv2)
+            gps_conv2 = self.gps_dropout2(gps_conv2) if training else gps_conv2
 
-        sensor = tf.concat([acc, gyro, gps], 3)
+            gps_conv3 = self.gps_conv3(gps_conv2)
+            gps_conv3 = self.gps_batch_norm3(gps_conv3)
+            gps_conv3 = self.gps_act3(gps_conv3)
+
+            gps_shortcut = self.gps_shortcut(gps)
+            gps_shortcut = self.gps_batch_norm3(gps_shortcut)
+            gps_shortcut = self.gps_act3(gps_shortcut)
+
+            gps = add([gps_conv3, gps_shortcut])
+
+            sensor = tf.concat([acc, gyro, gps], 3)
+
+        else:
+
+            sensor = tf.concat([acc, gyro], 3)
 
         sensor = self.sensor_dropout(sensor)
 
-        sensor = self.sensor_conv1(sensor)
-        sensor = self.sensor_batch_norm1(sensor)
-        sensor = self.sensor_act1(sensor)
-        sensor = self.sensor_dropout1(sensor) if training else sensor
+        sensor_conv1 = self.sensor_conv1(sensor)
+        sensor_conv1 = self.sensor_batch_norm1(sensor_conv1)
+        sensor_conv1 = self.sensor_act1(sensor_conv1)
+        sensor_conv1 = self.sensor_dropout1(sensor_conv1) if training else sensor_conv1
 
-        sensor = self.sensor_conv2(sensor)
-        sensor = self.sensor_batch_norm2(sensor)
-        sensor = self.sensor_act2(sensor)
-        sensor = self.sensor_dropout2(sensor) if training else sensor
+        sensor_conv2 = self.sensor_conv2(sensor_conv1)
+        sensor_conv2 = self.sensor_batch_norm2(sensor_conv2)
+        sensor_conv2 = self.sensor_act2(sensor_conv2)
+        sensor_conv2 = self.sensor_dropout2(sensor_conv2) if training else sensor_conv2
 
-        sensor = self.sensor_conv3(sensor)
-        sensor = self.sensor_batch_norm3(sensor)
-        sensor = self.sensor_act3(sensor)
-        sensor = self.sensor_dropout3(sensor) if training else sensor
+        sensor_conv3 = self.sensor_conv3(sensor_conv2)
+        sensor_conv3 = self.sensor_batch_norm3(sensor_conv3)
+        sensor_conv3 = self.sensor_act3(sensor_conv3)
+        sensor_conv3 = self.sensor_dropout3(sensor_conv3) if training else sensor_conv3
+
+        sensor_shortcut = self.sensor_shortcut(sensor)
+        sensor_shortcut = self.sensor_batch_norm3(sensor_shortcut)
+        sensor_shortcut = self.sensor_act3(sensor_shortcut)
+        sensor_shortcut = self.sensor_dropout3(sensor_shortcut) if training else sensor_shortcut
+
+        sensor = add([sensor_conv3, sensor_shortcut])
 
         sensor = tf.transpose(sensor, perm=(0, 2, 1, 3, 4))
 
@@ -314,13 +345,13 @@ class DeepSense(tf.keras.Model):
 
         sensor = self.sensor_rnn_dropout(sensor) if training else self.sensor_rnn(sensor)
 
-        # if hparams[HP_REDUCE_MEAN]:
-        #
-        #     sensor = tf.math.reduce_mean(sensor, axis=1, keepdims=False)
-        #
-        # else:
+        if hparams[HP_RNN_CELL_TYPE] != 'None':
 
-        sensor = self.flatten(sensor)
+            sensor = tf.math.reduce_mean(sensor, axis=1, keepdims=False)
+
+        else:
+
+            sensor = self.flatten(sensor)
 
         sensor = self.fc(sensor)
 
@@ -341,7 +372,7 @@ def train(run_dir, hparams, train_ds, val_ds, class_weight, input_shape, tn, fp,
         monitor='val_auc',
         patience=patience,
         verbose=1,
-        mode='min',
+        mode='max',
         restore_best_weights=True)
 
     with tf.summary.create_file_writer(run_dir).as_default():
@@ -419,8 +450,8 @@ if __name__ == '__main__':
     HP_DROPOUT_L13 = hp.HParam('dropout_l13', hp.Discrete([0.25, 0.5, 0.75]))
     HP_RNN_UNITS = hp.HParam('rnn_units', hp.Discrete([32, 64, 128, 256, 512]))
     HP_RNN_CELL_TYPE = hp.HParam('rnn_cell_type', hp.Discrete(['stacked_RNN', 'LSTM', 'None']))
-    HP_REDUCE_MEAN = hp.HParam('reduce_mean', hp.Discrete([True, False]))
     HP_IMAG = hp.HParam('imag', hp.Discrete([True, False]))
+    HP_GPS_ACTIVE = hp.HParam('gps_active', hp.Discrete([True, False]))
     HP_LR = hp.HParam('learning_rate', hp.Discrete([0.01, 0.001, 0.0001]))
 
     METRIC_TN = 'val_tn'
@@ -437,7 +468,7 @@ if __name__ == '__main__':
                      HP_NUM_KERNELS_L1, HP_NUM_KERNELS_L2, HP_NUM_KERNELS_L3, HP_NUM_KERNELS_L4, HP_NUM_KERNELS_L5,
                      HP_NUM_KERNELS_L6, HP_DROPOUT_L1, HP_DROPOUT_L2, HP_DROPOUT_L3, HP_DROPOUT_L4,
                      HP_DROPOUT_L5, HP_DROPOUT_L6, HP_DROPOUT_L7, HP_DROPOUT_L8, HP_DROPOUT_L9, HP_DROPOUT_L10,
-                     HP_DROPOUT_L11, HP_DROPOUT_L12, HP_DROPOUT_L13, HP_RNN_UNITS, HP_RNN_CELL_TYPE, HP_IMAG, HP_LR],
+                     HP_DROPOUT_L11, HP_DROPOUT_L12, HP_DROPOUT_L13, HP_RNN_UNITS, HP_RNN_CELL_TYPE, HP_IMAG, HP_GPS_ACTIVE, HP_LR],
             metrics=[hp.Metric(METRIC_TN, display_name='val_tn'), hp.Metric(METRIC_FP, display_name='val_fp'),
                      hp.Metric(METRIC_FN, display_name='val_fn'), hp.Metric(METRIC_TP, display_name='val_tp'),
                      hp.Metric(METRIC_AUC, display_name='val_auc'), hp.Metric(METRIC_TSS, display_name='val_tss'),
@@ -472,6 +503,7 @@ if __name__ == '__main__':
             HP_RNN_UNITS: HP_RNN_UNITS.domain.sample_uniform(),
             HP_RNN_CELL_TYPE: HP_RNN_CELL_TYPE.domain.sample_uniform(),
             HP_IMAG: HP_IMAG.domain.sample_uniform() if HP_FOURIER else False,
+            HP_GPS_ACTIVE: HP_GPS_ACTIVE.domain.sample_uniform(),
             HP_LR: HP_LR.domain.sample_uniform(),
         }
 
