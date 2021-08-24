@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
 import tensorflow as tf
-from tensorflow.keras.layers import Dense, Lambda, Flatten, Conv1D, MaxPooling1D, Dropout, TimeDistributed, LSTM, \
+from tensorflow.keras.layers import Dense, Lambda, Flatten, Conv1D, MaxPooling1D, Dropout, TimeDistributed, LSTM, GRU, \
     ConvLSTM2D, Conv3D, BatchNormalization, ReLU, Reshape, GRUCell, RNN, StackedRNNCells, add
 from tensorboard.plugins.hparams import api as hp
 
@@ -195,18 +195,37 @@ class DeepSense(tf.keras.Model):
 
             self.sensor_gru1 = GRUCell(hparams[HP_RNN_UNITS], activation=None)
             self.sensor_gru2 = GRUCell(hparams[HP_RNN_UNITS], activation=None)
-            self.sensor_rnn = RNN(StackedRNNCells([self.sensor_gru1, self.sensor_gru2]), return_sequences=True)
+            self.sensor_stackedrnn = RNN(StackedRNNCells([self.sensor_gru1, self.sensor_gru2]), return_sequences=True)
 
             self.sensor_gru1_dropout = GRUCell(hparams[HP_RNN_UNITS], dropout=hparams[HP_DROPOUT_L12], activation=None)
             self.sensor_gru2_dropout = GRUCell(hparams[HP_RNN_UNITS], dropout=hparams[HP_DROPOUT_L13], activation=None)
-            self.sensor_rnn_dropout = RNN(StackedRNNCells([self.sensor_gru1_dropout, self.sensor_gru2_dropout]),
+            self.sensor_stackedrnn_dropout = RNN(StackedRNNCells([self.sensor_gru1_dropout, self.sensor_gru2_dropout]),
                                           return_sequences=True)
 
-        elif hparams[HP_RNN_CELL_TYPE] == 'LSTM':
+        elif hparams[HP_RNN_CELL_TYPE] == 'Single LSTM':
 
-            self.sensor_rnn = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True)
-            self.sensor_rnn_dropout = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True,
+            self.sensor_lstm1 = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True)
+            self.sensor_lstm1_dropout = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True,
                                            dropout=hparams[HP_DROPOUT_L12])
+
+        elif hparams[HP_RNN_CELL_TYPE] == 'Double LSTM':
+
+            self.sensor_lstm1 = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True)
+            self.sensor_lstm1_dropout = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L12])
+            self.sensor_lstm2 = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True)
+            self.sensor_lstm2_dropout = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L13])
+
+        elif hparams[HP_RNN_CELL_TYPE] == 'Single GRU':
+
+            self.sensor_gru1 = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True)
+            self.sensor_gru1_dropout = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L12])
+
+        elif hparams[HP_RNN_CELL_TYPE] == 'Double GRU':
+
+            self.sensor_gru1 = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True)
+            self.sensor_gru1_dropout = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L12])
+            self.sensor_gru2 = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True)
+            self.sensor_gru2_dropout = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L13])
 
         elif hparams[HP_RNN_CELL_TYPE] == 'None':
 
@@ -343,15 +362,35 @@ class DeepSense(tf.keras.Model):
 
         sensor = self.sensor_reshape(sensor)
 
-        sensor = self.sensor_rnn_dropout(sensor) if training else self.sensor_rnn(sensor)
+        if hparams[HP_RNN_CELL_TYPE] == 'stacked_RNN':
 
-        if hparams[HP_RNN_CELL_TYPE] != 'None':
+            sensor = self.sensor_stackedrnn_dropout(sensor) if training else self.sensor_stackedrnn(sensor)
 
-            sensor = tf.math.reduce_mean(sensor, axis=1, keepdims=False)
+        elif hparams[HP_RNN_CELL_TYPE] == 'Single LSTM':
+
+            sensor = self.sensor_lstm1_dropout(sensor) if training else self.sensor_lstm1(sensor)
+
+        elif hparams[HP_RNN_CELL_TYPE] == 'Double LSTM':
+
+            sensor = self.sensor_lstm1_dropout(sensor) if training else self.sensor_lstm1(sensor)
+            sensor = self.sensor_lstm2_dropout(sensor) if training else self.sensor_lstm2(sensor)
+
+        elif hparams[HP_RNN_CELL_TYPE] == 'Single GRU':
+
+            sensor = self.sensor_gru1_dropout(sensor) if training else self.sensor_gru1(sensor)
+
+        elif hparams[HP_RNN_CELL_TYPE] == 'Double GRU':
+
+            sensor = self.sensor_gru1_dropout(sensor) if training else self.sensor_gru1(sensor)
+            sensor = self.sensor_gru2_dropout(sensor) if training else self.sensor_gru2(sensor)
+
+        if hparams[HP_RNN_CELL_TYPE] == 'None':
+
+            sensor = self.flatten(sensor)
 
         else:
 
-            sensor = self.flatten(sensor)
+            sensor = tf.math.reduce_mean(sensor, axis=1, keepdims=False)
 
         sensor = self.fc(sensor)
 
@@ -449,9 +488,10 @@ if __name__ == '__main__':
     HP_DROPOUT_L12 = hp.HParam('dropout_l12', hp.Discrete([0.25, 0.5, 0.75]))
     HP_DROPOUT_L13 = hp.HParam('dropout_l13', hp.Discrete([0.25, 0.5, 0.75]))
     HP_RNN_UNITS = hp.HParam('rnn_units', hp.Discrete([32, 64, 128, 256, 512]))
-    HP_RNN_CELL_TYPE = hp.HParam('rnn_cell_type', hp.Discrete(['stacked_RNN', 'LSTM', 'None']))
+    HP_RNN_CELL_TYPE = hp.HParam('rnn_cell_type', hp.Discrete(['stacked_RNN', 'Single LSTM', 'Double LSTM', 'Single GRU', 'Double LSTM', 'None']))
     HP_IMAG = hp.HParam('imag', hp.Discrete([True, False]))
     HP_GPS_ACTIVE = hp.HParam('gps_active', hp.Discrete([True, False]))
+    HP_BATCH_SIZE = hp.HParam('batch_size', hp.Discrete([64, 128, 256]))
     HP_LR = hp.HParam('learning_rate', hp.Discrete([0.01, 0.001, 0.0001]))
 
     METRIC_TN = 'val_tn'
@@ -468,7 +508,7 @@ if __name__ == '__main__':
                      HP_NUM_KERNELS_L1, HP_NUM_KERNELS_L2, HP_NUM_KERNELS_L3, HP_NUM_KERNELS_L4, HP_NUM_KERNELS_L5,
                      HP_NUM_KERNELS_L6, HP_DROPOUT_L1, HP_DROPOUT_L2, HP_DROPOUT_L3, HP_DROPOUT_L4,
                      HP_DROPOUT_L5, HP_DROPOUT_L6, HP_DROPOUT_L7, HP_DROPOUT_L8, HP_DROPOUT_L9, HP_DROPOUT_L10,
-                     HP_DROPOUT_L11, HP_DROPOUT_L12, HP_DROPOUT_L13, HP_RNN_UNITS, HP_RNN_CELL_TYPE, HP_IMAG, HP_GPS_ACTIVE, HP_LR],
+                     HP_DROPOUT_L11, HP_DROPOUT_L12, HP_DROPOUT_L13, HP_RNN_UNITS, HP_RNN_CELL_TYPE, HP_IMAG, HP_GPS_ACTIVE, HP_BATCH_SIZE, HP_LR],
             metrics=[hp.Metric(METRIC_TN, display_name='val_tn'), hp.Metric(METRIC_FP, display_name='val_fp'),
                      hp.Metric(METRIC_FN, display_name='val_fn'), hp.Metric(METRIC_TP, display_name='val_tp'),
                      hp.Metric(METRIC_AUC, display_name='val_auc'), hp.Metric(METRIC_TSS, display_name='val_tss'),
@@ -504,6 +544,7 @@ if __name__ == '__main__':
             HP_RNN_CELL_TYPE: HP_RNN_CELL_TYPE.domain.sample_uniform(),
             HP_IMAG: HP_IMAG.domain.sample_uniform() if HP_FOURIER else False,
             HP_GPS_ACTIVE: HP_GPS_ACTIVE.domain.sample_uniform(),
+            HP_BATCH_SIZE: HP_BATCH_SIZE.domain.sample_uniform(),
             HP_LR: HP_LR.domain.sample_uniform(),
         }
 
@@ -522,7 +563,7 @@ if __name__ == '__main__':
         create_buckets(dir, hparams, tmp_dir, target_region, bucket_size, deepsense, class_counts_file)
         train_ds, val_ds, test_ds, class_weight = load_data(tmp_dir, target_region, input_shape, batch_size, in_memory, deepsense, os.path.join(tmp_dir, class_counts_file))
 
-        train(hparam_logs + '_' + datetime.now().strftime('%Y%m%d-%H%M%S') + '_' + run_name, hparams, train_ds, val_ds,
+        train(hparam_logs + '_' + datetime.now().strftime('%Y%m%d-%H%M%S') + '_' + np.random.randint(100) + '_' + run_name, hparams, train_ds, val_ds,
               class_weight, input_shape, tn, fp, fn, tp, auc, tss, sas, num_epochs, patience)
 
         os.remove(os.path.join(tmp_dir, 'train', target_region + '.npz'))
