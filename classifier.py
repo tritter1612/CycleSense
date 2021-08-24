@@ -3,7 +3,7 @@ import numpy as np
 from datetime import datetime
 import tensorflow as tf
 from tensorflow.keras.layers import Dense, Flatten, Conv1D, Conv2D, Conv3D, RNN, GRUCell, StackedRNNCells, ReLU, \
-    Reshape, BatchNormalization, ReLU, Dropout, MaxPooling1D, Dropout, TimeDistributed, LSTM, ConvLSTM2D
+    Reshape, BatchNormalization, ReLU, Dropout, MaxPooling1D, Dropout, TimeDistributed, LSTM, ConvLSTM2D, add
 from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score
 
 from data_loader import load_data
@@ -50,6 +50,8 @@ class DeepSense(tf.keras.Model):
         self.acc_batch_norm3 = BatchNormalization()
         self.acc_act3 = ReLU()
 
+        self.acc_shortcut = Conv3D(64, kernel_size=(3, 3, 3), activation=None, padding='valid')
+
         self.gyro_conv1 = Conv3D(64, kernel_size=(3, 3, 3), activation=None, padding='valid',
                                  input_shape=input_shape)
         self.gyro_batch_norm1 = BatchNormalization()
@@ -65,6 +67,8 @@ class DeepSense(tf.keras.Model):
         self.gyro_batch_norm3 = BatchNormalization()
         self.gyro_act3 = ReLU()
 
+        self.gyro_shortcut = Conv3D(64, kernel_size=(3, 3, 3), activation=None, padding='valid')
+
         self.gps_conv1 = Conv3D(64, kernel_size=(3, 3, 2), activation=None, padding='valid')
         self.gps_batch_norm1 = BatchNormalization()
         self.gps_act1 = ReLU()
@@ -79,6 +83,8 @@ class DeepSense(tf.keras.Model):
         self.gps_batch_norm3 = BatchNormalization()
         self.gps_act3 = ReLU()
         self.gps_dropout3 = Dropout(0.5)
+
+        self.gps_shortcut = Conv3D(64, kernel_size=(3, 3, 2), activation=None, padding='valid')
 
         self.sensor_dropout = Dropout(0.5)
 
@@ -96,6 +102,8 @@ class DeepSense(tf.keras.Model):
         self.sensor_batch_norm3 = BatchNormalization()
         self.sensor_act3 = ReLU()
         self.sensor_dropout3 = Dropout(0.5)
+
+        self.sensor_shortcut = Conv3D(64, kernel_size=(3, 3, 1), activation=None, padding='same')
 
         self.sensor_reshape = Reshape((18, 6 * 3 * 64))
 
@@ -130,68 +138,93 @@ class DeepSense(tf.keras.Model):
         # get real part of complex gps data
         gps = tf.math.real(gps)
 
-        acc = self.acc_conv1(acc)
-        acc = self.acc_batch_norm1(acc)
-        acc = self.acc_act1(acc)
-        acc = self.acc_dropout1(acc) if training else acc
+        acc_conv1 = self.acc_conv1(acc)
+        acc_conv1 = self.acc_batch_norm1(acc_conv1)
+        acc_conv1 = self.acc_act1(acc_conv1)
+        acc_conv1 = self.acc_dropout1(acc_conv1) if training else acc_conv1
 
-        acc = self.acc_conv2(acc)
-        acc = self.acc_batch_norm2(acc)
-        acc = self.acc_act2(acc)
-        acc = self.acc_dropout2(acc) if training else acc
+        acc_conv2 = self.acc_conv2(acc_conv1)
+        acc_conv2 = self.acc_batch_norm2(acc_conv2)
+        acc_conv2 = self.acc_act2(acc_conv2)
+        acc_conv2 = self.acc_dropout2(acc_conv2) if training else acc_conv2
 
-        acc = self.acc_conv3(acc)
-        acc = self.acc_batch_norm3(acc)
-        acc = self.acc_act3(acc)
+        acc_conv3 = self.acc_conv3(acc_conv2)
+        acc_conv3 = self.acc_batch_norm3(acc_conv3)
+        acc_conv3 = self.acc_act3(acc_conv3)
 
-        gyro = self.gyro_conv1(gyro)
-        gyro = self.gyro_batch_norm1(gyro)
-        gyro = self.gyro_act1(gyro)
-        gyro = self.gyro_dropout1(gyro) if training else gyro
+        acc_shortcut = self.acc_shortcut(acc)
+        acc_shortcut = self.acc_batch_norm3(acc_shortcut)
+        acc_shortcut = self.acc_act3(acc_shortcut)
 
-        gyro = self.gyro_conv2(gyro)
-        gyro = self.gyro_batch_norm2(gyro)
-        gyro = self.gyro_act2(gyro)
-        gyro = self.gyro_dropout2(gyro) if training else gyro
+        acc = add([acc_conv3, acc_shortcut])
 
-        gyro = self.gyro_conv3(gyro)
-        gyro = self.gyro_batch_norm3(gyro)
-        gyro = self.gyro_act3(gyro)
+        gyro_conv1 = self.gyro_conv1(gyro)
+        gyro_conv1 = self.gyro_batch_norm1(gyro_conv1)
+        gyro_conv1 = self.gyro_act1(gyro_conv1)
+        gyro_conv1 = self.gyro_dropout1(gyro_conv1) if training else gyro_conv1
+
+        gyro_conv2 = self.gyro_conv2(gyro_conv1)
+        gyro_conv2 = self.gyro_batch_norm2(gyro_conv2)
+        gyro_conv2 = self.gyro_act2(gyro_conv2)
+        gyro_conv2 = self.gyro_dropout2(gyro_conv2) if training else gyro_conv2
+
+        gyro_conv3 = self.gyro_conv3(gyro_conv2)
+        gyro_conv3 = self.gyro_batch_norm3(gyro_conv3)
+        gyro_conv3 = self.gyro_act3(gyro_conv3)
+
+        gyro_shortcut = self.gyro_shortcut(gyro)
+        gyro_shortcut = self.gyro_batch_norm3(gyro_shortcut)
+        gyro_shortcut = self.gyro_act3(gyro_shortcut)
+
+        gyro = add([gyro_conv3, gyro_shortcut])
 
         gps = gps[:, :, :, :, tf.newaxis]
 
-        gps = self.gps_conv1(gps)
-        gps = self.gps_batch_norm1(gps)
-        gps = self.gps_act1(gps)
-        gps = self.gps_dropout1(gps) if training else gps
+        gps_conv1 = self.gps_conv1(gps)
+        gps_conv1 = self.gps_batch_norm1(gps_conv1)
+        gps_conv1 = self.gps_act1(gps_conv1)
+        gps_conv1 = self.gps_dropout1(gps_conv1) if training else gps_conv1
 
-        gps = self.gps_conv2(gps)
-        gps = self.gps_batch_norm2(gps)
-        gps = self.gps_act2(gps)
-        gps = self.gps_dropout2(gps) if training else gps
+        gps_conv2 = self.gps_conv2(gps_conv1)
+        gps_conv2 = self.gps_batch_norm2(gps_conv2)
+        gps_conv2 = self.gps_act2(gps_conv2)
+        gps_conv2 = self.gps_dropout2(gps_conv2) if training else gps_conv2
 
-        gps = self.gps_conv3(gps)
-        gps = self.gps_batch_norm3(gps)
-        gps = self.gps_act3(gps)
+        gps_conv3 = self.gps_conv3(gps_conv2)
+        gps_conv3 = self.gps_batch_norm3(gps_conv3)
+        gps_conv3 = self.gps_act3(gps_conv3)
+
+        gps_shortcut = self.gps_shortcut(gps)
+        gps_shortcut = self.gps_batch_norm3(gps_shortcut)
+        gps_shortcut = self.gps_act3(gps_shortcut)
+
+        gps = add([gps_conv3, gps_shortcut])
 
         sensor = tf.concat([acc, gyro, gps], 3)
 
         sensor = self.sensor_dropout(sensor)
 
-        sensor = self.sensor_conv1(sensor)
-        sensor = self.sensor_batch_norm1(sensor)
-        sensor = self.sensor_act1(sensor)
-        sensor = self.sensor_dropout1(sensor) if training else sensor
+        sensor_conv1 = self.sensor_conv1(sensor)
+        sensor_conv1 = self.sensor_batch_norm1(sensor_conv1)
+        sensor_conv1 = self.sensor_act1(sensor_conv1)
+        sensor_conv1 = self.sensor_dropout1(sensor_conv1) if training else sensor_conv1
 
-        sensor = self.sensor_conv2(sensor)
-        sensor = self.sensor_batch_norm2(sensor)
-        sensor = self.sensor_act2(sensor)
-        sensor = self.sensor_dropout2(sensor) if training else sensor
+        sensor_conv2 = self.sensor_conv2(sensor_conv1)
+        sensor_conv2 = self.sensor_batch_norm2(sensor_conv2)
+        sensor_conv2 = self.sensor_act2(sensor_conv2)
+        sensor_conv2 = self.sensor_dropout2(sensor_conv2) if training else sensor_conv2
 
-        sensor = self.sensor_conv3(sensor)
-        sensor = self.sensor_batch_norm3(sensor)
-        sensor = self.sensor_act3(sensor)
-        sensor = self.sensor_dropout3(sensor) if training else sensor
+        sensor_conv3 = self.sensor_conv3(sensor_conv2)
+        sensor_conv3 = self.sensor_batch_norm3(sensor_conv3)
+        sensor_conv3 = self.sensor_act3(sensor_conv3)
+        sensor_conv3 = self.sensor_dropout3(sensor_conv3) if training else sensor_conv3
+
+        sensor_shortcut = self.sensor_shortcut(sensor)
+        sensor_shortcut = self.sensor_batch_norm3(sensor_shortcut)
+        sensor_shortcut = self.sensor_act3(sensor_shortcut)
+        sensor_shortcut = self.sensor_dropout3(sensor_shortcut) if training else sensor_shortcut
+
+        sensor = add([sensor_conv3, sensor_shortcut])
 
         sensor = tf.transpose(sensor, perm=(0, 2, 1, 3, 4))
         sensor = self.sensor_reshape(sensor)

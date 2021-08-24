@@ -28,6 +28,8 @@ class DeepSense(tf.keras.Model):
         self.acc_batch_norm3 = BatchNormalization()
         self.acc_act3 = ReLU()
 
+        self.acc_shortcut = Conv3D(hparams[HP_NUM_KERNELS_L3], kernel_size=(3, 3, 3), activation=None, padding='valid')
+
         self.gyro_conv1 = Conv3D(hparams[HP_NUM_KERNELS_L1], kernel_size=(3, 3, 3), activation=None, padding='valid')
         self.gyro_batch_norm1 = BatchNormalization()
         self.gyro_act1 = ReLU()
@@ -41,6 +43,8 @@ class DeepSense(tf.keras.Model):
         self.gyro_conv3 = Conv3D(hparams[HP_NUM_KERNELS_L3], kernel_size=(3, 3, 1), activation=None, padding='same')
         self.gyro_batch_norm3 = BatchNormalization()
         self.gyro_act3 = ReLU()
+
+        self.gyro_shortcut = Conv3D(hparams[HP_NUM_KERNELS_L3], kernel_size=(3, 3, 3), activation=None, padding='valid')
 
         self.gps_conv1 = Conv3D(hparams[HP_NUM_KERNELS_L1], kernel_size=(3, 3, 2), activation=None, padding='valid')
         self.gps_batch_norm1 = BatchNormalization()
@@ -56,6 +60,8 @@ class DeepSense(tf.keras.Model):
         self.gps_batch_norm3 = BatchNormalization()
         self.gps_act3 = ReLU()
         self.gps_dropout3 = Dropout(hparams[HP_DROPOUT_L7])
+
+        self.gps_shortcut = Conv3D(hparams[HP_NUM_KERNELS_L3], kernel_size=(3, 3, 2), activation=None, padding='valid')
 
         self.sensor_dropout = Dropout(hparams[HP_DROPOUT_L8])
 
@@ -73,6 +79,8 @@ class DeepSense(tf.keras.Model):
         self.sensor_batch_norm3 = BatchNormalization()
         self.sensor_act3 = ReLU()
         self.sensor_dropout3 = Dropout(hparams[HP_DROPOUT_L11])
+
+        self.sensor_shortcut = Conv3D(hparams[HP_NUM_KERNELS_L6], kernel_size=(3, 3, 1), activation=None, padding='same')
 
         self.sensor_reshape = Reshape((input_shape[2] - 2, (input_shape[1] - 2) *  3 * hparams[HP_NUM_KERNELS_L6]))
 
@@ -258,13 +266,13 @@ if __name__ == '__main__':
     checkpoint_dir = 'checkpoints/cnn/training'
     target_region = 'Berlin'
     hparam_logs = 'logs/hparam_tuning'
-    class_counts_file = os.path.join(dir, 'class_counts.csv')
+    class_counts_file = 'class_counts.csv'
     bucket_size = 100
     batch_size = 128
     num_epochs = 1000
     patience = 5
     in_memory = False
-    fourier = True
+    deepsense = True
     fft_window = 8
     image_width = 20
     hpo_epochs = 100
@@ -276,7 +284,7 @@ if __name__ == '__main__':
     tss = TSS()
     sas = tf.keras.metrics.SensitivityAtSpecificity(0.96, name='sas')
 
-    if fourier:
+    if deepsense:
         input_shape = (None, fft_window, image_width, 3, 2)
     else:
         input_shape = (None, 4, int(bucket_size / 4), 8)
@@ -296,19 +304,19 @@ if __name__ == '__main__':
     HP_NUM_KERNELS_L10 = hp.HParam('num_kernels_l10', hp.Discrete([8, 16, 32, 64, 128]))
     HP_NUM_KERNELS_L11 = hp.HParam('num_kernels_l11', hp.Discrete([8, 16, 32, 64, 128]))
     HP_NUM_KERNELS_L12 = hp.HParam('num_kernels_l12', hp.Discrete([8, 16, 32, 64, 128]))
-    HP_DROPOUT_L1 = hp.HParam('dropout_l1', hp.Discrete([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]))
-    HP_DROPOUT_L2 = hp.HParam('dropout_l2', hp.Discrete([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]))
-    HP_DROPOUT_L3 = hp.HParam('dropout_l3', hp.Discrete([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]))
-    HP_DROPOUT_L4 = hp.HParam('dropout_l4', hp.Discrete([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]))
-    HP_DROPOUT_L5 = hp.HParam('dropout_l5', hp.Discrete([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]))
-    HP_DROPOUT_L6 = hp.HParam('dropout_l6', hp.Discrete([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]))
-    HP_DROPOUT_L7 = hp.HParam('dropout_l7', hp.Discrete([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]))
-    HP_DROPOUT_L8 = hp.HParam('dropout_l8', hp.Discrete([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]))
-    HP_DROPOUT_L9 = hp.HParam('dropout_l9', hp.Discrete([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]))
-    HP_DROPOUT_L10 = hp.HParam('dropout_l10', hp.Discrete([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]))
-    HP_DROPOUT_L11 = hp.HParam('dropout_l11', hp.Discrete([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]))
-    HP_DROPOUT_L12 = hp.HParam('dropout_l12', hp.Discrete([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]))
-    HP_DROPOUT_L13 = hp.HParam('dropout_l13', hp.Discrete([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]))
+    HP_DROPOUT_L1 = hp.HParam('dropout_l1', hp.Discrete([0.25, 0.5, 0.75]))
+    HP_DROPOUT_L2 = hp.HParam('dropout_l2', hp.Discrete([0.25, 0.5, 0.75]))
+    HP_DROPOUT_L3 = hp.HParam('dropout_l3', hp.Discrete([0.25, 0.5, 0.75]))
+    HP_DROPOUT_L4 = hp.HParam('dropout_l4', hp.Discrete([0.25, 0.5, 0.75]))
+    HP_DROPOUT_L5 = hp.HParam('dropout_l5', hp.Discrete([0.25, 0.5, 0.75]))
+    HP_DROPOUT_L6 = hp.HParam('dropout_l6', hp.Discrete([0.25, 0.5, 0.75]))
+    HP_DROPOUT_L7 = hp.HParam('dropout_l7', hp.Discrete([0.25, 0.5, 0.75]))
+    HP_DROPOUT_L8 = hp.HParam('dropout_l8', hp.Discrete([0.25, 0.5, 0.75]))
+    HP_DROPOUT_L9 = hp.HParam('dropout_l9', hp.Discrete([0.25, 0.5, 0.75]))
+    HP_DROPOUT_L10 = hp.HParam('dropout_l10', hp.Discrete([0.25, 0.5, 0.75]))
+    HP_DROPOUT_L11 = hp.HParam('dropout_l11', hp.Discrete([0.25, 0.5, 0.75]))
+    HP_DROPOUT_L12 = hp.HParam('dropout_l12', hp.Discrete([0.25, 0.5, 0.75]))
+    HP_DROPOUT_L13 = hp.HParam('dropout_l13', hp.Discrete([0.25, 0.5, 0.75]))
     HP_RNN_UNITS = hp.HParam('rnn_units', hp.Discrete([32, 64, 128, 256, 512]))
     HP_RNN_CELL_TYPE = hp.HParam('rnn_cell_type', hp.Discrete(['stacked_RNN', 'LSTM', 'None']))
     HP_REDUCE_MEAN = hp.HParam('reduce_mean', hp.Discrete([True, False]))
