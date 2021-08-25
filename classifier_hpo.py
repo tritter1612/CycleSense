@@ -563,7 +563,7 @@ if __name__ == '__main__':
         create_buckets(dir, hparams, tmp_dir, target_region, bucket_size, deepsense, class_counts_file)
         train_ds, val_ds, test_ds, class_weight = load_data(tmp_dir, target_region, input_shape, batch_size, in_memory, deepsense, os.path.join(tmp_dir, class_counts_file))
 
-        train(hparam_logs + '_' + datetime.now().strftime('%Y%m%d-%H%M%S') + '_' + np.random.randint(100) + '_' + run_name, hparams, train_ds, val_ds,
+        train(hparam_logs + '_' + datetime.now().strftime('%Y%m%d-%H%M%S') + '_' + str(np.random.randint(100)) + '_' + run_name, hparams, train_ds, val_ds,
               class_weight, input_shape, tn, fp, fn, tp, auc, tss, sas, num_epochs, patience)
 
         os.remove(os.path.join(tmp_dir, 'train', target_region + '.npz'))
