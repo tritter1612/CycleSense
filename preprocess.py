@@ -416,8 +416,8 @@ def create_buckets_inner(bucket_size, file):
     os.remove(file)
 
 
-def create_buckets(dir, target_region=None, bucket_size=22, deepsense=False, fft_window=8, image_width=20,
-                   class_counts_file='class_counts.csv', in_memory=True):
+def create_buckets(dir, target_region=None, bucket_size=22, in_memory=True, deepsense=False, fft_window=8, image_width=20,
+                   class_counts_file='class_counts.csv'):
     class_counts_df = pd.DataFrame()
 
     for split in ['train', 'test', 'val']:
@@ -536,7 +536,7 @@ def preprocess(dir, target_region=None, bucket_size=100, time_interval=100, inte
 
 
 if __name__ == '__main__':
-    dir = '../Ride_Data_before_buckets'
+    dir = '../Ride_Data'
     target_region = 'Berlin'
     bucket_size = 100
     time_interval = 100
