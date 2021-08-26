@@ -106,14 +106,9 @@ class DeepSense(tf.keras.Model):
 
         self.sensor_reshape = Reshape((input_shape[2] - 2, (input_shape[1] - 2) * 3 * 64))
 
-        self.sensor_gru1 = GRUCell(120, activation=None)
-        self.sensor_gru2 = GRUCell(120, activation=None)
+        self.sensor_gru1 = GRUCell(120, dropout=0.5, activation=None)
+        self.sensor_gru2 = GRUCell(120, dropout=0.5, activation=None)
         self.sensor_stacked_rnn = RNN(StackedRNNCells([self.sensor_gru1, self.sensor_gru2]), return_sequences=True)
-
-        self.sensor_gru1_dropout = GRUCell(120, dropout=0.5, activation=None)
-        self.sensor_gru2_dropout = GRUCell(120, dropout=0.5, activation=None)
-        self.sensor_stacked_rnn_dropout = RNN(StackedRNNCells([self.sensor_gru1_dropout, self.sensor_gru2_dropout]),
-                                              return_sequences=True)
 
         self.fc = Dense(1, activation='sigmoid', bias_initializer=output_bias)
 
@@ -228,7 +223,7 @@ class DeepSense(tf.keras.Model):
         sensor = tf.transpose(sensor, perm=(0, 2, 1, 3, 4))
         sensor = self.sensor_reshape(sensor)
 
-        sensor = self.sensor_stacked_rnn_dropout(sensor) if training else self.sensor_stacked_rnn(sensor)
+        sensor = self.sensor_stacked_rnn(sensor, training=training)
 
         sensor = tf.math.reduce_mean(sensor, axis=1, keepdims=False)
 

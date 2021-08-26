@@ -204,39 +204,27 @@ class DeepSense(tf.keras.Model):
 
         if hparams[HP_RNN_CELL_TYPE] == 'stacked_RNN':
 
-            self.sensor_gru1 = GRUCell(hparams[HP_RNN_UNITS], activation=None)
-            self.sensor_gru2 = GRUCell(hparams[HP_RNN_UNITS], activation=None)
+            self.sensor_gru1 = GRUCell(hparams[HP_RNN_UNITS], dropout=hparams[HP_DROPOUT_L11], activation=None)
+            self.sensor_gru2 = GRUCell(hparams[HP_RNN_UNITS], dropout=hparams[HP_DROPOUT_L12], activation=None)
             self.sensor_stackedrnn = RNN(StackedRNNCells([self.sensor_gru1, self.sensor_gru2]), return_sequences=True)
-
-            self.sensor_gru1_dropout = GRUCell(hparams[HP_RNN_UNITS], dropout=hparams[HP_DROPOUT_L11], activation=None)
-            self.sensor_gru2_dropout = GRUCell(hparams[HP_RNN_UNITS], dropout=hparams[HP_DROPOUT_L12], activation=None)
-            self.sensor_stackedrnn_dropout = RNN(StackedRNNCells([self.sensor_gru1_dropout, self.sensor_gru2_dropout]),
-                                          return_sequences=True)
 
         elif hparams[HP_RNN_CELL_TYPE] == 'Single LSTM':
 
-            self.sensor_lstm1 = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True)
-            self.sensor_lstm1_dropout = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True,
-                                           dropout=hparams[HP_DROPOUT_L11])
+            self.sensor_lstm1 = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L11])
 
         elif hparams[HP_RNN_CELL_TYPE] == 'Double LSTM':
 
-            self.sensor_lstm1 = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True)
-            self.sensor_lstm1_dropout = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L11])
-            self.sensor_lstm2 = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True)
-            self.sensor_lstm2_dropout = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L12])
+            self.sensor_lstm1 = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L11])
+            self.sensor_lstm2 = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L12])
 
         elif hparams[HP_RNN_CELL_TYPE] == 'Single GRU':
 
-            self.sensor_gru1 = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True)
-            self.sensor_gru1_dropout = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L11])
+            self.sensor_gru1 = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L11])
 
         elif hparams[HP_RNN_CELL_TYPE] == 'Double GRU':
 
-            self.sensor_gru1 = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True)
-            self.sensor_gru1_dropout = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L11])
-            self.sensor_gru2 = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True)
-            self.sensor_gru2_dropout = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L12])
+            self.sensor_gru1 = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L11])
+            self.sensor_gru2 = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L12])
 
         elif hparams[HP_RNN_CELL_TYPE] == 'None':
 
@@ -375,25 +363,25 @@ class DeepSense(tf.keras.Model):
 
         if hparams[HP_RNN_CELL_TYPE] == 'stacked_RNN':
 
-            sensor = self.sensor_stackedrnn_dropout(sensor) if training else self.sensor_stackedrnn(sensor)
+            sensor = self.sensor_stacked_rnn(sensor, training=training)
 
         elif hparams[HP_RNN_CELL_TYPE] == 'Single LSTM':
 
-            sensor = self.sensor_lstm1_dropout(sensor) if training else self.sensor_lstm1(sensor)
+            sensor = self.sensor_lstm1(sensor, training=training)
 
         elif hparams[HP_RNN_CELL_TYPE] == 'Double LSTM':
 
-            sensor = self.sensor_lstm1_dropout(sensor) if training else self.sensor_lstm1(sensor)
-            sensor = self.sensor_lstm2_dropout(sensor) if training else self.sensor_lstm2(sensor)
+            sensor = self.sensor_lstm1(sensor, training=training)
+            sensor = self.sensor_lstm2(sensor, training=training)
 
         elif hparams[HP_RNN_CELL_TYPE] == 'Single GRU':
 
-            sensor = self.sensor_gru1_dropout(sensor) if training else self.sensor_gru1(sensor)
+            sensor = self.sensor_gru1(sensor, training=training)
 
         elif hparams[HP_RNN_CELL_TYPE] == 'Double GRU':
 
-            sensor = self.sensor_gru1_dropout(sensor) if training else self.sensor_gru1(sensor)
-            sensor = self.sensor_gru2_dropout(sensor) if training else self.sensor_gru2(sensor)
+            sensor = self.sensor_gru1(sensor, training=training)
+            sensor = self.sensor_gru2(sensor, training=training)
 
         if hparams[HP_RNN_CELL_TYPE] == 'None':
 
