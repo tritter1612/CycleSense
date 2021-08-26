@@ -8,6 +8,7 @@ import tensorflow as tf
 from tensorflow.keras.layers import Dense, Lambda, Flatten, Conv1D, MaxPooling1D, Dropout, TimeDistributed, LSTM, GRU, \
     ConvLSTM2D, Conv3D, BatchNormalization, ReLU, Reshape, GRUCell, RNN, StackedRNNCells, add
 from tensorboard.plugins.hparams import api as hp
+import socket
 
 from data_loader import load_data
 from metrics import TSS
@@ -206,7 +207,7 @@ class DeepSense(tf.keras.Model):
 
             self.sensor_gru1 = GRUCell(hparams[HP_RNN_UNITS], dropout=hparams[HP_DROPOUT_L11], activation=None)
             self.sensor_gru2 = GRUCell(hparams[HP_RNN_UNITS], dropout=hparams[HP_DROPOUT_L12], activation=None)
-            self.sensor_stackedrnn = RNN(StackedRNNCells([self.sensor_gru1, self.sensor_gru2]), return_sequences=True)
+            self.sensor_stacked_rnn = RNN(StackedRNNCells([self.sensor_gru1, self.sensor_gru2]), return_sequences=True)
 
         elif hparams[HP_RNN_CELL_TYPE] == 'Single LSTM':
 
@@ -562,7 +563,7 @@ if __name__ == '__main__':
         create_buckets(dir, hparams, tmp_dir, target_region, bucket_size, in_memory, deepsense, class_counts_file)
         train_ds, val_ds, test_ds, class_weight = load_data(tmp_dir, target_region, input_shape, batch_size, in_memory, deepsense, os.path.join(tmp_dir, class_counts_file))
 
-        train(hparam_logs + '_' + datetime.now().strftime('%Y%m%d-%H%M%S') + '_' + str(np.random.randint(100)) + '_' + run_name, hparams, train_ds, val_ds,
+        train('_'.join([hparam_logs, datetime.now().strftime('%Y%m%d-%H%M%S'), socket.gethostname(), run_name]), hparams, train_ds, val_ds,
               class_weight, input_shape, tn, fp, fn, tp, auc, tss, sas, num_epochs, patience)
 
         os.remove(os.path.join(tmp_dir, 'train', target_region + '.npz'))
