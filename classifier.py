@@ -82,7 +82,6 @@ class DeepSense(tf.keras.Model):
         self.gps_conv3 = Conv3D(64, kernel_size=(3, 3, 1), activation=None, padding='same')
         self.gps_batch_norm3 = BatchNormalization()
         self.gps_act3 = ReLU()
-        self.gps_dropout3 = Dropout(0.5)
 
         self.gps_shortcut = Conv3D(64, kernel_size=(3, 3, 2), activation=None, padding='valid')
 
@@ -252,9 +251,11 @@ def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, in
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
 
     model.compile(optimizer=optimizer, loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
-                  metrics=['accuracy', tf.keras.metrics.TrueNegatives(name='tn'), tf.keras.metrics.FalsePositives(name='fp'),
+                  metrics=['accuracy', tf.keras.metrics.TrueNegatives(name='tn'),
+                           tf.keras.metrics.FalsePositives(name='fp'),
                            tf.keras.metrics.FalseNegatives(name='fn'), tf.keras.metrics.TruePositives(name='tp'),
-                           tf.keras.metrics.AUC(curve='PR', from_logits=False), TSS(), tf.keras.metrics.SensitivityAtSpecificity(0.96, name='sas')
+                           tf.keras.metrics.AUC(curve='PR', from_logits=False), TSS(),
+                           tf.keras.metrics.SensitivityAtSpecificity(0.96, name='sas')
                            ])
 
     latest = tf.train.latest_checkpoint(os.path.dirname(checkpoint_dir))
@@ -313,19 +314,18 @@ if __name__ == '__main__':
     target_region = 'Berlin'
     bucket_size = 100
     batch_size = 128
-    in_memory = False
+    in_memory = True
     num_epochs = 100
     patience = 10
     deepsense = True
-    fft_window = 8
-    image_width = 20
+    fft_window = 10
+    image_width = 10
     class_counts_file = os.path.join(dir, 'class_counts.csv')
 
     if deepsense:
         input_shape = (None, fft_window, image_width, 3, 2)
     else:
         input_shape = (None, 4, int(bucket_size / 4), 8)
-
 
     train_ds, val_ds, test_ds, class_weight = load_data(dir, target_region, input_shape, batch_size, in_memory, deepsense, class_counts_file)
     train(train_ds, val_ds, test_ds, class_weight, num_epochs, patience, input_shape, deepsense, checkpoint_dir)

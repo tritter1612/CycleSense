@@ -13,9 +13,9 @@ from data_loader import load_data
 from metrics import TSS
 
 
-def create_buckets(dir, hparams, tmp_dir, target_region=None, bucket_size=22, deepsense=False, class_counts_file='class_counts.csv'):
+def create_buckets(dir, hparams, tmp_dir, target_region=None, bucket_size=22, in_memory=True, deepsense=False, class_counts_file='class_counts.csv'):
 
-    image_width = 100 // hparams[HP_FFT_WINDOW]
+    image_width = bucket_size // hparams[HP_FFT_WINDOW]
 
     try:
         os.mkdir(tmp_dir)
@@ -37,7 +37,7 @@ def create_buckets(dir, hparams, tmp_dir, target_region=None, bucket_size=22, de
 
             file_list = glob.glob(os.path.join(subdir, 'VM2_*.csv'))
 
-            ride_images_dict = {}
+            ride_images_dict, ride_images_list = {}, []
 
             pos_counter, neg_counter = 0, 0
 
@@ -97,20 +97,32 @@ def create_buckets(dir, hparams, tmp_dir, target_region=None, bucket_size=22, de
 
                                 if np.any(ride_image_transformed[:, :, 8]) > 0:
                                     ride_image_transformed[:, :, 8] = 1  # TODO: preserve incident type
-                                    dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(5) + '_bucket_incident'
                                     pos_counter += 1
+                                    if in_memory:
+                                        ride_images_list.append(ride_image_transformed)
+                                    else:
+                                        dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(
+                                            5) + '_bucket_incident'
                                 else:
                                     ride_image_transformed[:, :, 8] = 0
-                                    dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(5) + '_bucket'
                                     neg_counter += 1
+                                    if in_memory:
+                                        ride_images_list.append(ride_image_transformed)
+                                    else:
+                                        dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(
+                                            5) + '_bucket'
 
-                                ride_images_dict.update({dict_name : ride_image_transformed})
+                                if not in_memory:
+                                    ride_images_dict.update({dict_name : ride_image_transformed})
 
                     class_counts_df[split + '_' + region] = [pos_counter, neg_counter]
 
                 class_counts_df.to_csv(os.path.join(tmp_dir, class_counts_file), ',', index=False)
 
-                np.savez(os.path.join(tmp_dir, split, region + '.npz'), **ride_images_dict)
+                if in_memory:
+                    np.savez(os.path.join(tmp_dir, split, region + '.npz'), ride_images_list)
+                else:
+                    np.savez(os.path.join(tmp_dir, split, region + '.npz'), **ride_images_dict)
 
             else:
                 return
@@ -166,26 +178,25 @@ class DeepSense(tf.keras.Model):
         self.gps_conv3 = Conv3D(hparams[HP_NUM_KERNELS_L3], kernel_size=(3, 3, 1), activation=None, padding='same')
         self.gps_batch_norm3 = BatchNormalization()
         self.gps_act3 = ReLU()
-        self.gps_dropout3 = Dropout(hparams[HP_DROPOUT_L7])
 
         self.gps_shortcut = Conv3D(hparams[HP_NUM_KERNELS_L3], kernel_size=(3, 3, 2), activation=None, padding='valid')
 
-        self.sensor_dropout = Dropout(hparams[HP_DROPOUT_L8])
+        self.sensor_dropout = Dropout(hparams[HP_DROPOUT_L7])
 
         self.sensor_conv1 = Conv3D(hparams[HP_NUM_KERNELS_L4], kernel_size=(3, 3, 1), activation=None, padding='same')
         self.sensor_batch_norm1 = BatchNormalization()
         self.sensor_act1 = ReLU()
-        self.sensor_dropout1 = Dropout(hparams[HP_DROPOUT_L9])
+        self.sensor_dropout1 = Dropout(hparams[HP_DROPOUT_L8])
 
         self.sensor_conv2 = Conv3D(hparams[HP_NUM_KERNELS_L5], kernel_size=(3, 3, 1), activation=None, padding='same')
         self.sensor_batch_norm2 = BatchNormalization()
         self.sensor_act2 = ReLU()
-        self.sensor_dropout2 = Dropout(hparams[HP_DROPOUT_L10])
+        self.sensor_dropout2 = Dropout(hparams[HP_DROPOUT_L9])
 
         self.sensor_conv3 = Conv3D(hparams[HP_NUM_KERNELS_L6], kernel_size=(3, 3, 1), activation=None, padding='same')
         self.sensor_batch_norm3 = BatchNormalization()
         self.sensor_act3 = ReLU()
-        self.sensor_dropout3 = Dropout(hparams[HP_DROPOUT_L11])
+        self.sensor_dropout3 = Dropout(hparams[HP_DROPOUT_L10])
 
         self.sensor_shortcut = Conv3D(hparams[HP_NUM_KERNELS_L6], kernel_size=(3, 3, 1), activation=None, padding='same')
 
@@ -197,8 +208,8 @@ class DeepSense(tf.keras.Model):
             self.sensor_gru2 = GRUCell(hparams[HP_RNN_UNITS], activation=None)
             self.sensor_stackedrnn = RNN(StackedRNNCells([self.sensor_gru1, self.sensor_gru2]), return_sequences=True)
 
-            self.sensor_gru1_dropout = GRUCell(hparams[HP_RNN_UNITS], dropout=hparams[HP_DROPOUT_L12], activation=None)
-            self.sensor_gru2_dropout = GRUCell(hparams[HP_RNN_UNITS], dropout=hparams[HP_DROPOUT_L13], activation=None)
+            self.sensor_gru1_dropout = GRUCell(hparams[HP_RNN_UNITS], dropout=hparams[HP_DROPOUT_L11], activation=None)
+            self.sensor_gru2_dropout = GRUCell(hparams[HP_RNN_UNITS], dropout=hparams[HP_DROPOUT_L12], activation=None)
             self.sensor_stackedrnn_dropout = RNN(StackedRNNCells([self.sensor_gru1_dropout, self.sensor_gru2_dropout]),
                                           return_sequences=True)
 
@@ -206,31 +217,31 @@ class DeepSense(tf.keras.Model):
 
             self.sensor_lstm1 = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True)
             self.sensor_lstm1_dropout = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True,
-                                           dropout=hparams[HP_DROPOUT_L12])
+                                           dropout=hparams[HP_DROPOUT_L11])
 
         elif hparams[HP_RNN_CELL_TYPE] == 'Double LSTM':
 
             self.sensor_lstm1 = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True)
-            self.sensor_lstm1_dropout = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L12])
+            self.sensor_lstm1_dropout = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L11])
             self.sensor_lstm2 = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True)
-            self.sensor_lstm2_dropout = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L13])
+            self.sensor_lstm2_dropout = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L12])
 
         elif hparams[HP_RNN_CELL_TYPE] == 'Single GRU':
 
             self.sensor_gru1 = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True)
-            self.sensor_gru1_dropout = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L12])
+            self.sensor_gru1_dropout = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L11])
 
         elif hparams[HP_RNN_CELL_TYPE] == 'Double GRU':
 
             self.sensor_gru1 = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True)
-            self.sensor_gru1_dropout = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L12])
+            self.sensor_gru1_dropout = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L11])
             self.sensor_gru2 = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True)
-            self.sensor_gru2_dropout = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L13])
+            self.sensor_gru2_dropout = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L12])
 
         elif hparams[HP_RNN_CELL_TYPE] == 'None':
 
             self.sensor_rnn = Lambda((lambda x: x))
-            self.sensor_rnn_dropout = Dropout(hparams[HP_DROPOUT_L12])
+            self.sensor_rnn_dropout = Dropout(hparams[HP_DROPOUT_L11])
 
         self.flatten = Flatten()
 
@@ -439,7 +450,7 @@ def train(run_dir, hparams, train_ds, val_ds, class_weight, input_shape, tn, fp,
 
 
 if __name__ == '__main__':
-    dir = '../Ride_Data'
+    dir = '../Ride_Data_before_buckets'
     checkpoint_dir = 'checkpoints/cnn/training'
     tmp_dir = 'tmp_dir'
     target_region = 'Berlin'
@@ -449,7 +460,7 @@ if __name__ == '__main__':
     batch_size = 128
     num_epochs = 1000
     patience = 5
-    in_memory = False
+    in_memory = True
     deepsense = True
     hpo_epochs = 100
     tn = tf.keras.metrics.TrueNegatives(name='tn')
@@ -515,7 +526,7 @@ if __name__ == '__main__':
                      hp.Metric(METRIC_SAS, display_name='val_sas')],
         )
 
-    session_num = 0
+    session_num = 7
 
     for i in range(hpo_epochs):
         hparams = {
@@ -560,7 +571,7 @@ if __name__ == '__main__':
         else:
             input_shape = (None, 4, int(bucket_size / 4), 8)
 
-        create_buckets(dir, hparams, tmp_dir, target_region, bucket_size, deepsense, class_counts_file)
+        create_buckets(dir, hparams, tmp_dir, target_region, bucket_size, in_memory, deepsense, class_counts_file)
         train_ds, val_ds, test_ds, class_weight = load_data(tmp_dir, target_region, input_shape, batch_size, in_memory, deepsense, os.path.join(tmp_dir, class_counts_file))
 
         train(hparam_logs + '_' + datetime.now().strftime('%Y%m%d-%H%M%S') + '_' + str(np.random.randint(100)) + '_' + run_name, hparams, train_ds, val_ds,
