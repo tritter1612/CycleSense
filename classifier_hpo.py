@@ -130,7 +130,7 @@ def create_buckets(dir, hparams, tmp_dir, target_region=None, bucket_size=22, in
 
 class DeepSense(tf.keras.Model):
 
-    def __init__(self, hparams, input_shape=(None, 8, 20, 3, 2)):
+    def __init__(self, hparams, input_shape=(None, 10, 10, 3, 2)):
         super(DeepSense, self).__init__()
 
         self.acc_conv1 = Conv3D(hparams[HP_NUM_KERNELS_L1], kernel_size=(3, 3, 3), activation=None, padding='valid')

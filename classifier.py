@@ -232,7 +232,7 @@ class DeepSense(tf.keras.Model):
         return sensor
 
 
-def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, input_shape=(None, 8, 20, 3, 2),
+def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, input_shape=(None, 10, 10, 3, 2),
           deepsense=True, checkpoint_dir='checkpoints/cnn/training'):
     initial_bias = np.log(class_weight[0] / class_weight[1])
 

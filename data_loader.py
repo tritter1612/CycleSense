@@ -88,7 +88,7 @@ def create_ds(dir, target_region, split, batch_size=32, in_memory=True, deepsens
         return ds
 
 
-def load_data(dir, target_region, input_shape=(None, 4, 11, 8), batch_size=32, in_memory=True, deepsense=True,
+def load_data(dir, target_region, input_shape=(None, 10, 10, 3, 2), batch_size=32, in_memory=True, deepsense=True,
               class_counts_file='class_counts.csv'):
     global input_shape_global
     input_shape_global = input_shape

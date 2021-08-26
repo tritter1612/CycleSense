@@ -471,11 +471,10 @@ def create_buckets(dir, target_region=None, bucket_size=22, in_memory=True, deep
                         image_split_range = n_image_splits * image_width
 
                         if n_image_splits > 0:
-                            ride_image_list = np.array_split(ride_images[:, :image_split_range, :], n_image_splits,
-                                                             axis=1)
-                            lat = np.array_split(lat[:, :image_split_range, :], n_image_splits, axis=1)
-                            lon = np.array_split(lon[:, :image_split_range, :], n_image_splits, axis=1)
-                            incident = np.array_split(incident[:, :image_split_range, :], n_image_splits, axis=1)
+                            ride_image_list = np.array_split(ride_images[:, :image_split_range, :], n_image_splits, axis=1)
+                            lat_list = np.array_split(lat[:, :image_split_range, :], n_image_splits, axis=1)
+                            lon_list = np.array_split(lon[:, :image_split_range, :], n_image_splits, axis=1)
+                            incident_list = np.array_split(incident[:, :image_split_range, :], n_image_splits, axis=1)
 
                             for i, ride_image in enumerate(ride_image_list):
                                 # apply fourier transformation to data
@@ -483,7 +482,7 @@ def create_buckets(dir, target_region=None, bucket_size=22, in_memory=True, deep
 
                                 # append lat, lon & incident
                                 ride_image_transformed = np.dstack(
-                                    (ride_image_transformed, lat[i], lon[i], incident[i]))
+                                    (ride_image_transformed, lat_list[i], lon_list[i], incident_list[i]))
 
                                 if np.any(ride_image_transformed[:, :, 8]) > 0:
                                     ride_image_transformed[:, :, 8] = 1  # TODO: preserve incident type
@@ -537,7 +536,7 @@ def preprocess(dir, target_region=None, bucket_size=100, time_interval=100, inte
 
 if __name__ == '__main__':
     dir = '../Ride_Data'
-    target_region = 'Berlin'
+    target_region = None
     bucket_size = 100
     time_interval = 100
     interpolation_type = 'equidistant'
