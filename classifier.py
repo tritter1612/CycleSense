@@ -29,8 +29,11 @@ class CNN_LSTM_(tf.keras.models.Sequential):
 
 class DeepSense(tf.keras.Model):
 
-    def __init__(self, input_shape=(None, 8, 20, 3, 2), output_bias=None):
+    def __init__(self, input_shape=(None, 5, 20, 3, 1), output_bias=None, imag=False, gps=False):
         super(DeepSense, self).__init__()
+
+        self.imag = imag
+        self.gps = gps
 
         if output_bias is not None:
             output_bias = tf.keras.initializers.Constant(output_bias)
@@ -104,7 +107,7 @@ class DeepSense(tf.keras.Model):
 
         self.sensor_shortcut = Conv3D(64, kernel_size=(3, 3, 1), activation=None, padding='same')
 
-        self.sensor_reshape = Reshape((input_shape[2] - 2, (input_shape[1] - 2) * 3 * 64))
+        self.sensor_reshape = Reshape((input_shape[2] - 2, (input_shape[1] - 2) * (2 + self.gps) * 64))
 
         self.sensor_gru1 = GRUCell(120, dropout=0.5, activation=None)
         self.sensor_gru2 = GRUCell(120, dropout=0.5, activation=None)
@@ -113,24 +116,30 @@ class DeepSense(tf.keras.Model):
         self.fc = Dense(1, activation='sigmoid', bias_initializer=output_bias)
 
     def call(self, x, training):
-        # split sensors
-        acc, gyro, gps = tf.split(x, num_or_size_splits=3, axis=3)
 
-        # remove incidents
-        gps = gps[:, :, :, :2]
+        if self.gps:
+            # split sensors
+            acc, gyro, gps = tf.split(x, num_or_size_splits=3, axis=3)
+            gps = gps[:, :, :, :2]
 
-        # split real and imaginary part of complex accelerometer data
-        acc_real = tf.math.real(acc)
-        acc_imag = tf.math.imag(acc)
-        acc = tf.stack((acc_real, acc_imag), axis=4)
+        else:
+            acc, gyro = x[:, :, :, :3], x[:, :, :, 3:6]
 
-        # split real and imaginary part of complex gyrosensor data
-        gyro_real = tf.math.real(gyro)
-        gyro_imag = tf.math.imag(gyro)
-        gyro = tf.stack((gyro_real, gyro_imag), axis=4)
+        if self.imag:
+            # split real and imaginary part of complex accelerometer and gyroscope data
+            acc_real = tf.math.real(acc)
+            acc_imag = tf.math.imag(acc)
+            acc = tf.stack((acc_real, acc_imag), axis=4)
+            gyro_real = tf.math.real(gyro)
+            gyro_imag = tf.math.imag(gyro)
+            gyro = tf.stack((gyro_real, gyro_imag), axis=4)
 
-        # get real part of complex gps data
-        gps = tf.math.real(gps)
+        else:
+            acc = acc[:, :, :, :, tf.newaxis]
+            gyro = gyro[:, :, :, :, tf.newaxis]
+
+        if self.gps:
+            gps = tf.math.real(gps)[:, :, :, :, tf.newaxis]
 
         acc_conv1 = self.acc_conv1(acc)
         acc_conv1 = self.acc_batch_norm1(acc_conv1)
@@ -172,29 +181,33 @@ class DeepSense(tf.keras.Model):
 
         gyro = add([gyro_conv3, gyro_shortcut])
 
-        gps = gps[:, :, :, :, tf.newaxis]
+        if self.gps:
+            gps = gps[:, :, :, :, tf.newaxis]
 
-        gps_conv1 = self.gps_conv1(gps)
-        gps_conv1 = self.gps_batch_norm1(gps_conv1)
-        gps_conv1 = self.gps_act1(gps_conv1)
-        gps_conv1 = self.gps_dropout1(gps_conv1) if training else gps_conv1
+            gps_conv1 = self.gps_conv1(gps)
+            gps_conv1 = self.gps_batch_norm1(gps_conv1)
+            gps_conv1 = self.gps_act1(gps_conv1)
+            gps_conv1 = self.gps_dropout1(gps_conv1) if training else gps_conv1
 
-        gps_conv2 = self.gps_conv2(gps_conv1)
-        gps_conv2 = self.gps_batch_norm2(gps_conv2)
-        gps_conv2 = self.gps_act2(gps_conv2)
-        gps_conv2 = self.gps_dropout2(gps_conv2) if training else gps_conv2
+            gps_conv2 = self.gps_conv2(gps_conv1)
+            gps_conv2 = self.gps_batch_norm2(gps_conv2)
+            gps_conv2 = self.gps_act2(gps_conv2)
+            gps_conv2 = self.gps_dropout2(gps_conv2) if training else gps_conv2
 
-        gps_conv3 = self.gps_conv3(gps_conv2)
-        gps_conv3 = self.gps_batch_norm3(gps_conv3)
-        gps_conv3 = self.gps_act3(gps_conv3)
+            gps_conv3 = self.gps_conv3(gps_conv2)
+            gps_conv3 = self.gps_batch_norm3(gps_conv3)
+            gps_conv3 = self.gps_act3(gps_conv3)
 
-        gps_shortcut = self.gps_shortcut(gps)
-        gps_shortcut = self.gps_batch_norm3(gps_shortcut)
-        gps_shortcut = self.gps_act3(gps_shortcut)
+            gps_shortcut = self.gps_shortcut(gps)
+            gps_shortcut = self.gps_batch_norm3(gps_shortcut)
+            gps_shortcut = self.gps_act3(gps_shortcut)
 
-        gps = add([gps_conv3, gps_shortcut])
+            gps = add([gps_conv3, gps_shortcut])
 
-        sensor = tf.concat([acc, gyro, gps], 3)
+            sensor = tf.concat([acc, gyro, gps], 3)
+
+        else:
+            sensor = tf.concat([acc, gyro], 3)
 
         sensor = self.sensor_dropout(sensor)
 
@@ -221,6 +234,7 @@ class DeepSense(tf.keras.Model):
         sensor = add([sensor_conv3, sensor_shortcut])
 
         sensor = tf.transpose(sensor, perm=(0, 2, 1, 3, 4))
+
         sensor = self.sensor_reshape(sensor)
 
         sensor = self.sensor_stacked_rnn(sensor, training=training)
@@ -232,16 +246,16 @@ class DeepSense(tf.keras.Model):
         return sensor
 
 
-def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, input_shape=(None, 10, 10, 3, 2),
-          deepsense=True, checkpoint_dir='checkpoints/cnn/training'):
+def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, input_shape_feature_net=(None, 5, 20, 3, 1),
+          deepsense=True, imag=False, gps=False, checkpoint_dir='checkpoints/cnn/training'):
     initial_bias = np.log(class_weight[0] / class_weight[1])
 
     if deepsense:
-        model = DeepSense(input_shape, initial_bias)
+        model = DeepSense(input_shape_feature_net, initial_bias, imag=imag, gps=gps)
 
     else:
         model = CNN_LSTM_()
-        model.create_model(input_shape)
+        model.create_model(input_shape_feature_net)
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
 
@@ -249,8 +263,9 @@ def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, in
                   metrics=['accuracy', tf.keras.metrics.TrueNegatives(name='tn'),
                            tf.keras.metrics.FalsePositives(name='fp'),
                            tf.keras.metrics.FalseNegatives(name='fn'), tf.keras.metrics.TruePositives(name='tp'),
-                           tf.keras.metrics.AUC(curve='PR', from_logits=False), TSS(),
-                           tf.keras.metrics.SensitivityAtSpecificity(0.96, name='sas')
+                           tf.keras.metrics.AUC(curve='roc', from_logits=False, name='aucroc'),
+                           tf.keras.metrics.AUC(curve='PR', from_logits=False, name='aucpr'),
+                           TSS(), tf.keras.metrics.SensitivityAtSpecificity(0.96, name='sas')
                            ])
 
     latest = tf.train.latest_checkpoint(os.path.dirname(checkpoint_dir))
@@ -262,7 +277,7 @@ def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, in
     # Create a callback that saves the model's weights
     cp_callback = tf.keras.callbacks.ModelCheckpoint(
         filepath=checkpoint_dir,
-        monitor='val_auc',
+        monitor='val_aucroc',
         verbose=1,
         save_best_only=True,
         mode='max',
@@ -271,7 +286,7 @@ def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, in
 
     # Create a callback for early stopping
     es_callback = tf.keras.callbacks.EarlyStopping(
-        monitor='val_auc',
+        monitor='val_aucroc',
         patience=patience,
         verbose=1,
         mode='max',
@@ -313,14 +328,16 @@ if __name__ == '__main__':
     num_epochs = 100
     patience = 10
     deepsense = True
-    fft_window = 10
-    image_width = 10
+    fft_window = 5
+    image_width = 20
+    imag = False
+    gps = False
     class_counts_file = os.path.join(dir, 'class_counts.csv')
 
     if deepsense:
-        input_shape = (None, fft_window, image_width, 3, 2)
+        input_shape = (None, fft_window, image_width, 3, 1)
     else:
         input_shape = (None, 4, int(bucket_size / 4), 8)
 
     train_ds, val_ds, test_ds, class_weight = load_data(dir, target_region, input_shape, batch_size, in_memory, deepsense, class_counts_file)
-    train(train_ds, val_ds, test_ds, class_weight, num_epochs, patience, input_shape, deepsense, checkpoint_dir)
+    train(train_ds, val_ds, test_ds, class_weight, num_epochs, patience, input_shape, deepsense, imag, gps, checkpoint_dir)

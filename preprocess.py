@@ -392,6 +392,40 @@ def scale(dir, target_region=None):
                 df.to_csv(file, ',', index=False)
 
 
+def augment_data(ride_image, axis):
+
+    if axis == 0:
+        # 180 degree rotation matrix around X axis
+        R = [[1, 0, 0],
+             [0, -1, 0],
+             [0, 0, -1]]
+
+    elif axis == 1:
+        # 180 degree rotation matrix around Y axis
+        R = [[-1, 0, 0],
+             [0, 1, 0],
+             [0, 0, -1]]
+
+    elif axis == 2:
+        # 180 degree rotation matrix around Z axis
+        R = [[-1, 0, 0],
+             [0, -1, 0],
+             [0, 0, 1]]
+
+    else:
+        return None
+
+    ride_image_acc = ride_image[:, :, :3]
+    ride_image_gyro = ride_image[:, :, 3:6]
+
+    ride_image_acc_rotated = np.matmul(ride_image_acc, R)
+    ride_image_gyro_rotated = np.matmul(ride_image_gyro, R)
+
+    ride_image_rotated = np.concatenate((ride_image_acc_rotated, ride_image_gyro_rotated, ride_image[:, :, 6:]), axis=2)
+
+    return ride_image_rotated
+
+
 def create_buckets_inner(bucket_size, file):
     df = pd.read_csv(file)
 
@@ -417,7 +451,7 @@ def create_buckets_inner(bucket_size, file):
 
 
 def create_buckets(dir, target_region=None, bucket_size=22, in_memory=True, deepsense=False, fft_window=8, image_width=20,
-                   class_counts_file='class_counts.csv'):
+                   data_augmentation=False, imag=False, gps=False, class_counts_file='class_counts.csv'):
     class_counts_df = pd.DataFrame()
 
     for split in ['train', 'test', 'val']:
@@ -480,29 +514,58 @@ def create_buckets(dir, target_region=None, bucket_size=22, in_memory=True, deep
                                 # apply fourier transformation to data
                                 ride_image_transformed = np.fft.fft(ride_image, axis=0)
 
-                                # append lat, lon & incident
-                                ride_image_transformed = np.dstack(
-                                    (ride_image_transformed, lat_list[i], lon_list[i], incident_list[i]))
+                                if imag == False:
+                                    ride_image_transformed = np.real(ride_image_transformed)
 
-                                if np.any(ride_image_transformed[:, :, 8]) > 0:
-                                    ride_image_transformed[:, :, 8] = 1  # TODO: preserve incident type
+                                if gps:
+                                    # append lat, lon & incident
+                                    ride_image_transformed = np.dstack(
+                                        (ride_image_transformed, lat_list[i], lon_list[i], incident_list[i]))
+
+                                else:
+                                    # append incident
+                                    ride_image_transformed = np.dstack(
+                                        (ride_image_transformed, incident_list[i]))
+
+                                if np.any(ride_image_transformed[:, :, -1]) > 0:
+                                    ride_image_transformed[:, :, -1] = 1  # TODO: Maybe preserve incident type
                                     pos_counter += 1
+
+                                    if split == 'train' and data_augmentation:
+                                        ride_image_rotated_X = augment_data(ride_image_transformed, axis=0)
+                                        ride_image_rotated_Y = augment_data(ride_image_transformed, axis=1)
+                                        ride_image_rotated_Z = augment_data(ride_image_transformed, axis=2)
+                                        pos_counter += 3
+
+                                        if in_memory:
+                                            ride_images_list.append(ride_image_rotated_X)
+                                            ride_images_list.append(ride_image_rotated_Y)
+                                            ride_images_list.append(ride_image_rotated_Z)
+
+                                        else:
+                                            dict_name_rotated_X = os.path.basename(file).replace('.csv', '') +  '_no' + str(i).zfill(5) + '_rotated_X_bucket_incident'
+                                            ride_images_dict.update({dict_name_rotated_X: ride_image_rotated_X})
+                                            dict_name_rotated_Y = os.path.basename(file).replace('.csv', '') +  '_no' + str(i).zfill(5) + '_rotated_Y_bucket_incident'
+                                            ride_images_dict.update({dict_name_rotated_Y: ride_image_rotated_Y})
+                                            dict_name_rotated_Z = os.path.basename(file).replace('.csv', '') +  '_no' + str(i).zfill(5) + '_rotated_Z_bucket_incident'
+                                            ride_images_dict.update({dict_name_rotated_Z: ride_image_rotated_Z})
+
                                     if in_memory:
                                         ride_images_list.append(ride_image_transformed)
+
                                     else:
-                                        dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(
-                                            5) + '_bucket_incident'
+                                        dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(5) + '_bucket_incident'
+                                        ride_images_dict.update({dict_name: ride_image_transformed})
+
                                 else:
-                                    ride_image_transformed[:, :, 8] = 0
+                                    ride_image_transformed[:, :, -1] = 0
                                     neg_counter += 1
                                     if in_memory:
                                         ride_images_list.append(ride_image_transformed)
                                     else:
                                         dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(
                                             5) + '_bucket'
-
-                                if not in_memory:
-                                    ride_images_dict.update({dict_name: ride_image_transformed})
+                                        ride_images_dict.update({dict_name: ride_image_transformed})
 
                     class_counts_df[split + '_' + region] = [pos_counter, neg_counter]
 
@@ -523,7 +586,7 @@ def create_buckets(dir, target_region=None, bucket_size=22, in_memory=True, deep
 
 
 def preprocess(dir, target_region=None, bucket_size=100, time_interval=100, interpolation_type='equidistant',
-               in_memory=True, deepsense=True, fft_window=8, image_width=20, class_counts_file='class_counts.csv'):
+               in_memory=True, deepsense=True, fft_window=8, image_width=20, data_augmentation=False, imag=False, gps=False, class_counts_file='class_counts.csv'):
     remove_invalid_rides(dir, target_region)
     remove_acc_outliers(dir, target_region)
     calc_vel_delta(dir, target_region)
@@ -531,7 +594,7 @@ def preprocess(dir, target_region=None, bucket_size=100, time_interval=100, inte
     remove_vel_outliers(dir, target_region)
     remove_empty_rows(dir, target_region)
     scale(dir, target_region)
-    create_buckets(dir, target_region, bucket_size, in_memory, deepsense, fft_window, image_width, class_counts_file)
+    create_buckets(dir, target_region, bucket_size, in_memory, deepsense, fft_window, image_width, data_augmentation, imag, gps, class_counts_file)
 
 
 if __name__ == '__main__':
@@ -541,9 +604,11 @@ if __name__ == '__main__':
     time_interval = 100
     interpolation_type = 'equidistant'
     deepsense = True
-    fft_window = 10
-    image_width = 10
+    fft_window = 5
+    image_width = 20
     in_memory = True
+    data_augmentation = False
+    imag = False
+    gps = False
     class_counts_file = 'class_counts.csv'
-    preprocess(dir, target_region, bucket_size, time_interval, interpolation_type, in_memory,
-               deepsense, fft_window, image_width, class_counts_file)
+    preprocess(dir, target_region, bucket_size, time_interval, interpolation_type, in_memory, deepsense, fft_window, image_width, data_augmentation, imag, gps, class_counts_file)

@@ -22,8 +22,8 @@ def pack_features_vector(features, labels):
 def data_gen(dir, split, target_region):
     with np.load(os.path.join(dir, split, target_region)) as data:
         for file in data.files:
-            x = data[file][:, :, :]
-            y = tf.cast(data[file][:, :, 8], tf.dtypes.int32)
+            y = tf.cast(data[file][:, :, -1], tf.dtypes.int32)
+            x = data[file][:, :, :, :-1]
             y = tf.math.reduce_mean(y, axis=0)
             y = tf.math.reduce_mean(y, axis=0)
 
@@ -37,8 +37,8 @@ def create_ds(dir, target_region, split, batch_size=32, in_memory=True, deepsens
         if in_memory:
 
             with np.load(os.path.join(dir, split, target_region + '.npz')) as data:
-                x = data['arr_0'][:, :, :]
-                y = tf.cast(x[:, :, :, 8], tf.dtypes.int32)
+                y = tf.cast(data['arr_0'][:, :, :, -1], tf.dtypes.int32)
+                x = data['arr_0'][:, :, :, :-1]
                 y = tf.math.reduce_mean(y, axis=1)
                 y = tf.math.reduce_mean(y, axis=1)
                 y = y[:, tf.newaxis]
@@ -88,7 +88,7 @@ def create_ds(dir, target_region, split, batch_size=32, in_memory=True, deepsens
         return ds
 
 
-def load_data(dir, target_region, input_shape=(None, 10, 10, 3, 2), batch_size=32, in_memory=True, deepsense=True,
+def load_data(dir, target_region, input_shape=(None, 5, 20, 3, 2), batch_size=32, in_memory=True, deepsense=True,
               class_counts_file='class_counts.csv'):
     global input_shape_global
     input_shape_global = input_shape
