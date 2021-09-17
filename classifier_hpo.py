@@ -137,12 +137,12 @@ class DeepSense(tf.keras.Model):
         self.acc_conv1 = Conv3D(hparams[HP_NUM_KERNELS_L1], kernel_size=(3, 3, 3), activation=None, padding='valid')
         self.acc_batch_norm1 = BatchNormalization()
         self.acc_act1 = ReLU()
-        self.acc_dropout1 = Dropout(hparams[HP_DROPOUT_L1])
+        self.acc_dropout1 = Dropout(0.5)
 
         self.acc_conv2 = Conv3D(hparams[HP_NUM_KERNELS_L2], kernel_size=(3, 3, 1), activation=None, padding='same')
         self.acc_batch_norm2 = BatchNormalization()
         self.acc_act2 = ReLU()
-        self.acc_dropout2 = Dropout(hparams[HP_DROPOUT_L2])
+        self.acc_dropout2 = Dropout(0.5)
 
         self.acc_conv3 = Conv3D(hparams[HP_NUM_KERNELS_L3], kernel_size=(3, 3, 1), activation=None, padding='same')
         self.acc_batch_norm3 = BatchNormalization()
@@ -153,12 +153,12 @@ class DeepSense(tf.keras.Model):
         self.gyro_conv1 = Conv3D(hparams[HP_NUM_KERNELS_L1], kernel_size=(3, 3, 3), activation=None, padding='valid')
         self.gyro_batch_norm1 = BatchNormalization()
         self.gyro_act1 = ReLU()
-        self.gyro_dropout1 = Dropout(hparams[HP_DROPOUT_L3])
+        self.gyro_dropout1 = Dropout(0.5)
 
         self.gyro_conv2 = Conv3D(hparams[HP_NUM_KERNELS_L2], kernel_size=(3, 3, 1), activation=None, padding='same')
         self.gyro_batch_norm2 = BatchNormalization()
         self.gyro_act2 = ReLU()
-        self.gyro_dropout2 = Dropout(hparams[HP_DROPOUT_L4])
+        self.gyro_dropout2 = Dropout(0.5)
 
         self.gyro_conv3 = Conv3D(hparams[HP_NUM_KERNELS_L3], kernel_size=(3, 3, 1), activation=None, padding='same')
         self.gyro_batch_norm3 = BatchNormalization()
@@ -169,12 +169,12 @@ class DeepSense(tf.keras.Model):
         self.gps_conv1 = Conv3D(hparams[HP_NUM_KERNELS_L1], kernel_size=(3, 3, 2), activation=None, padding='valid')
         self.gps_batch_norm1 = BatchNormalization()
         self.gps_act1 = ReLU()
-        self.gps_dropout1 = Dropout(hparams[HP_DROPOUT_L5])
+        self.gps_dropout1 = Dropout(0.5)
 
         self.gps_conv2 = Conv3D(hparams[HP_NUM_KERNELS_L2], kernel_size=(3, 3, 1), activation=None, padding='same')
         self.gps_batch_norm2 = BatchNormalization()
         self.gps_act2 = ReLU()
-        self.gps_dropout2 = Dropout(hparams[HP_DROPOUT_L6])
+        self.gps_dropout2 = Dropout(0.5)
 
         self.gps_conv3 = Conv3D(hparams[HP_NUM_KERNELS_L3], kernel_size=(3, 3, 1), activation=None, padding='same')
         self.gps_batch_norm3 = BatchNormalization()
@@ -182,22 +182,22 @@ class DeepSense(tf.keras.Model):
 
         self.gps_shortcut = Conv3D(hparams[HP_NUM_KERNELS_L3], kernel_size=(3, 3, 2), activation=None, padding='valid')
 
-        self.sensor_dropout = Dropout(hparams[HP_DROPOUT_L7])
+        self.sensor_dropout = Dropout(0.5)
 
         self.sensor_conv1 = Conv3D(hparams[HP_NUM_KERNELS_L4], kernel_size=(3, 3, 1), activation=None, padding='same')
         self.sensor_batch_norm1 = BatchNormalization()
         self.sensor_act1 = ReLU()
-        self.sensor_dropout1 = Dropout(hparams[HP_DROPOUT_L8])
+        self.sensor_dropout1 = Dropout(0.5)
 
         self.sensor_conv2 = Conv3D(hparams[HP_NUM_KERNELS_L5], kernel_size=(3, 3, 1), activation=None, padding='same')
         self.sensor_batch_norm2 = BatchNormalization()
         self.sensor_act2 = ReLU()
-        self.sensor_dropout2 = Dropout(hparams[HP_DROPOUT_L9])
+        self.sensor_dropout2 = Dropout(0.5)
 
         self.sensor_conv3 = Conv3D(hparams[HP_NUM_KERNELS_L6], kernel_size=(3, 3, 1), activation=None, padding='same')
         self.sensor_batch_norm3 = BatchNormalization()
         self.sensor_act3 = ReLU()
-        self.sensor_dropout3 = Dropout(hparams[HP_DROPOUT_L10])
+        self.sensor_dropout3 = Dropout(0.5)
 
         self.sensor_shortcut = Conv3D(hparams[HP_NUM_KERNELS_L6], kernel_size=(3, 3, 1), activation=None, padding='same')
 
@@ -205,32 +205,32 @@ class DeepSense(tf.keras.Model):
 
         if hparams[HP_RNN_CELL_TYPE] == 'stacked_RNN':
 
-            self.sensor_gru1 = GRUCell(hparams[HP_RNN_UNITS], dropout=hparams[HP_DROPOUT_L11], activation=None)
-            self.sensor_gru2 = GRUCell(hparams[HP_RNN_UNITS], dropout=hparams[HP_DROPOUT_L12], activation=None)
+            self.sensor_gru1 = GRUCell(hparams[HP_RNN_UNITS], dropout=0.5, activation=None)
+            self.sensor_gru2 = GRUCell(hparams[HP_RNN_UNITS], dropout=0.5, activation=None)
             self.sensor_stacked_rnn = RNN(StackedRNNCells([self.sensor_gru1, self.sensor_gru2]), return_sequences=True)
 
         elif hparams[HP_RNN_CELL_TYPE] == 'Single LSTM':
 
-            self.sensor_lstm1 = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L11])
+            self.sensor_lstm1 = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=0.5)
 
         elif hparams[HP_RNN_CELL_TYPE] == 'Double LSTM':
 
-            self.sensor_lstm1 = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L11])
-            self.sensor_lstm2 = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L12])
+            self.sensor_lstm1 = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=0.5)
+            self.sensor_lstm2 = LSTM(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=0.5)
 
         elif hparams[HP_RNN_CELL_TYPE] == 'Single GRU':
 
-            self.sensor_gru1 = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L11])
+            self.sensor_gru1 = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=0.5)
 
         elif hparams[HP_RNN_CELL_TYPE] == 'Double GRU':
 
-            self.sensor_gru1 = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L11])
-            self.sensor_gru2 = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=hparams[HP_DROPOUT_L12])
+            self.sensor_gru1 = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=0.5)
+            self.sensor_gru2 = GRU(hparams[HP_RNN_UNITS], activation=None, return_sequences=True, dropout=0.5)
 
         elif hparams[HP_RNN_CELL_TYPE] == 'None':
 
             self.sensor_rnn = Lambda((lambda x: x))
-            self.sensor_rnn_dropout = Dropout(hparams[HP_DROPOUT_L11])
+            self.sensor_rnn_dropout = Dropout(0.5)
 
         self.flatten = Flatten()
 
@@ -460,7 +460,7 @@ if __name__ == '__main__':
     tss = TSS()
     sas = tf.keras.metrics.SensitivityAtSpecificity(0.96, name='sas')
 
-    HP_FFT_WINDOW = hp.HParam('fft_window', hp.Discrete([5, 10, 20]))
+    HP_FFT_WINDOW = hp.HParam('fft_window', hp.Discrete([5, 10]))
     HP_FOURIER = hp.HParam('fourier', hp.Discrete([True, False]))
     HP_NUM_KERNELS_L1 = hp.HParam('num_kernels_l1', hp.Discrete([8, 16, 32, 64, 128]))
     HP_NUM_KERNELS_L2 = hp.HParam('num_kernels_l2', hp.Discrete([8, 16, 32, 64, 128]))
@@ -468,31 +468,11 @@ if __name__ == '__main__':
     HP_NUM_KERNELS_L4 = hp.HParam('num_kernels_l4', hp.Discrete([8, 16, 32, 64, 128]))
     HP_NUM_KERNELS_L5 = hp.HParam('num_kernels_l5', hp.Discrete([8, 16, 32, 64, 128]))
     HP_NUM_KERNELS_L6 = hp.HParam('num_kernels_l6', hp.Discrete([8, 16, 32, 64, 128]))
-    HP_NUM_KERNELS_L7 = hp.HParam('num_kernels_l7', hp.Discrete([8, 16, 32, 64, 128]))
-    HP_NUM_KERNELS_L8 = hp.HParam('num_kernels_l8', hp.Discrete([8, 16, 32, 64, 128]))
-    HP_NUM_KERNELS_L9 = hp.HParam('num_kernels_l9', hp.Discrete([8, 16, 32, 64, 128]))
-    HP_NUM_KERNELS_L10 = hp.HParam('num_kernels_l10', hp.Discrete([8, 16, 32, 64, 128]))
-    HP_NUM_KERNELS_L11 = hp.HParam('num_kernels_l11', hp.Discrete([8, 16, 32, 64, 128]))
-    HP_NUM_KERNELS_L12 = hp.HParam('num_kernels_l12', hp.Discrete([8, 16, 32, 64, 128]))
-    HP_DROPOUT_L1 = hp.HParam('dropout_l1', hp.Discrete([0.25, 0.5, 0.75]))
-    HP_DROPOUT_L2 = hp.HParam('dropout_l2', hp.Discrete([0.25, 0.5, 0.75]))
-    HP_DROPOUT_L3 = hp.HParam('dropout_l3', hp.Discrete([0.25, 0.5, 0.75]))
-    HP_DROPOUT_L4 = hp.HParam('dropout_l4', hp.Discrete([0.25, 0.5, 0.75]))
-    HP_DROPOUT_L5 = hp.HParam('dropout_l5', hp.Discrete([0.25, 0.5, 0.75]))
-    HP_DROPOUT_L6 = hp.HParam('dropout_l6', hp.Discrete([0.25, 0.5, 0.75]))
-    HP_DROPOUT_L7 = hp.HParam('dropout_l7', hp.Discrete([0.25, 0.5, 0.75]))
-    HP_DROPOUT_L8 = hp.HParam('dropout_l8', hp.Discrete([0.25, 0.5, 0.75]))
-    HP_DROPOUT_L9 = hp.HParam('dropout_l9', hp.Discrete([0.25, 0.5, 0.75]))
-    HP_DROPOUT_L10 = hp.HParam('dropout_l10', hp.Discrete([0.25, 0.5, 0.75]))
-    HP_DROPOUT_L11 = hp.HParam('dropout_l11', hp.Discrete([0.25, 0.5, 0.75]))
-    HP_DROPOUT_L12 = hp.HParam('dropout_l12', hp.Discrete([0.25, 0.5, 0.75]))
-    HP_DROPOUT_L13 = hp.HParam('dropout_l13', hp.Discrete([0.25, 0.5, 0.75]))
     HP_RNN_UNITS = hp.HParam('rnn_units', hp.Discrete([32, 64, 128, 256, 512]))
     HP_RNN_CELL_TYPE = hp.HParam('rnn_cell_type', hp.Discrete(['stacked_RNN', 'Single LSTM', 'Double LSTM', 'Single GRU', 'Double LSTM', 'None']))
     HP_IMAG = hp.HParam('imag', hp.Discrete([True, False]))
     HP_GPS_ACTIVE = hp.HParam('gps_active', hp.Discrete([True, False]))
-    HP_BATCH_SIZE = hp.HParam('batch_size', hp.Discrete([64, 128, 256]))
-    HP_LR = hp.HParam('learning_rate', hp.Discrete([0.01, 0.001, 0.0001]))
+    HP_LR = hp.HParam('learning_rate', hp.Discrete([0.0001]))
 
     METRIC_TN = 'val_tn'
     METRIC_FP = 'val_fp'
@@ -506,16 +486,14 @@ if __name__ == '__main__':
         hp.hparams_config(
             hparams=[HP_FFT_WINDOW, HP_FOURIER,
                      HP_NUM_KERNELS_L1, HP_NUM_KERNELS_L2, HP_NUM_KERNELS_L3, HP_NUM_KERNELS_L4, HP_NUM_KERNELS_L5,
-                     HP_NUM_KERNELS_L6, HP_DROPOUT_L1, HP_DROPOUT_L2, HP_DROPOUT_L3, HP_DROPOUT_L4,
-                     HP_DROPOUT_L5, HP_DROPOUT_L6, HP_DROPOUT_L7, HP_DROPOUT_L8, HP_DROPOUT_L9, HP_DROPOUT_L10,
-                     HP_DROPOUT_L11, HP_DROPOUT_L12, HP_DROPOUT_L13, HP_RNN_UNITS, HP_RNN_CELL_TYPE, HP_IMAG, HP_GPS_ACTIVE, HP_BATCH_SIZE, HP_LR],
+                     HP_NUM_KERNELS_L6, HP_RNN_UNITS, HP_RNN_CELL_TYPE, HP_IMAG, HP_GPS_ACTIVE, HP_LR],
             metrics=[hp.Metric(METRIC_TN, display_name='val_tn'), hp.Metric(METRIC_FP, display_name='val_fp'),
                      hp.Metric(METRIC_FN, display_name='val_fn'), hp.Metric(METRIC_TP, display_name='val_tp'),
                      hp.Metric(METRIC_AUC, display_name='val_auc'), hp.Metric(METRIC_TSS, display_name='val_tss'),
                      hp.Metric(METRIC_SAS, display_name='val_sas')],
         )
 
-    session_num = 7
+    session_num = 0
 
     for i in range(hpo_epochs):
         hparams = {
@@ -527,24 +505,10 @@ if __name__ == '__main__':
             HP_NUM_KERNELS_L4: HP_NUM_KERNELS_L4.domain.sample_uniform(),
             HP_NUM_KERNELS_L5: HP_NUM_KERNELS_L5.domain.sample_uniform(),
             HP_NUM_KERNELS_L6: HP_NUM_KERNELS_L6.domain.sample_uniform(),
-            HP_DROPOUT_L1: HP_DROPOUT_L1.domain.sample_uniform(),
-            HP_DROPOUT_L2: HP_DROPOUT_L2.domain.sample_uniform(),
-            HP_DROPOUT_L3: HP_DROPOUT_L3.domain.sample_uniform(),
-            HP_DROPOUT_L4: HP_DROPOUT_L4.domain.sample_uniform(),
-            HP_DROPOUT_L5: HP_DROPOUT_L5.domain.sample_uniform(),
-            HP_DROPOUT_L6: HP_DROPOUT_L6.domain.sample_uniform(),
-            HP_DROPOUT_L7: HP_DROPOUT_L7.domain.sample_uniform(),
-            HP_DROPOUT_L8: HP_DROPOUT_L8.domain.sample_uniform(),
-            HP_DROPOUT_L9: HP_DROPOUT_L9.domain.sample_uniform(),
-            HP_DROPOUT_L10: HP_DROPOUT_L10.domain.sample_uniform(),
-            HP_DROPOUT_L11: HP_DROPOUT_L11.domain.sample_uniform(),
-            HP_DROPOUT_L12: HP_DROPOUT_L12.domain.sample_uniform(),
-            HP_DROPOUT_L13: HP_DROPOUT_L13.domain.sample_uniform(),
             HP_RNN_UNITS: HP_RNN_UNITS.domain.sample_uniform(),
             HP_RNN_CELL_TYPE: HP_RNN_CELL_TYPE.domain.sample_uniform(),
             HP_IMAG: HP_IMAG.domain.sample_uniform() if HP_FOURIER else False,
             HP_GPS_ACTIVE: HP_GPS_ACTIVE.domain.sample_uniform(),
-            HP_BATCH_SIZE: HP_BATCH_SIZE.domain.sample_uniform(),
             HP_LR: HP_LR.domain.sample_uniform(),
         }
 
