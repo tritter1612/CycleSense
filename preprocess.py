@@ -361,21 +361,25 @@ def scale(dir, target_region=None):
 
     split = 'train'
 
-    for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
-                       desc='fit scaler'):
-        region = os.path.basename(subdir)
+    scaler_file = os.path.join(dir, 'scaler.save')
 
-        if target_region is not None and target_region != region:
-            continue
+    if scaler_file.isfile():
+        scaler_maxabs = joblib.load(scaler_file)
+    else:
+        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')), desc='fit scaler'):
+            region = os.path.basename(subdir)
 
-        for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
-            df = pd.read_csv(file)
+            if target_region is not None and target_region != region:
+                continue
 
-            df.fillna(0, inplace=True)
+            for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
+                df = pd.read_csv(file)
 
-            scaler_maxabs.partial_fit(df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c']])
+                df.fillna(0, inplace=True)
 
-    print(scaler_maxabs.max_abs_)
+                scaler_maxabs.partial_fit(df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c']])
+
+        joblib.dump(scaler_maxabs, os.path.join(dir, 'scaler.save'))
 
     for split in ['train', 'test', 'val']:
 
