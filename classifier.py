@@ -329,13 +329,13 @@ if __name__ == '__main__':
     patience = 10
     deepsense_flag = True
     fft_window = 5
-    image_width = 20
+    slices = 20
     imag_flag = False
     gps_flag = False
     class_counts_file = os.path.join(dir, 'class_counts.csv')
 
     if deepsense_flag:
-        input_shape = (None, fft_window, image_width, 3, 1)
+        input_shape = (None, fft_window, slices, 3, 1)
     else:
         input_shape = (None, 4, int(bucket_size / 4), 8)
 

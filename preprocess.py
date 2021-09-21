@@ -455,7 +455,7 @@ def create_buckets_inner(bucket_size, file):
     os.remove(file)
 
 
-def create_buckets(dir, target_region=None, bucket_size=22, in_memory_flag=True, deepsense_flag=False, fft_window=5, image_width=20,
+def create_buckets(dir, target_region=None, bucket_size=100, in_memory_flag=True, deepsense_flag=False, fft_window=5, slices=20,
                    data_augmentation_flag=False, gps_flag=False, class_counts_file='class_counts.csv'):
     class_counts_df = pd.DataFrame()
 
@@ -506,8 +506,8 @@ def create_buckets(dir, target_region=None, bucket_size=22, in_memory_flag=True,
                         lon = np.stack(np.vsplit(lon[:window_split_range], n_window_splits), axis=1)
                         incident = np.stack(np.vsplit(incident[:window_split_range], n_window_splits), axis=1)
 
-                        n_image_splits = n_window_splits // image_width
-                        image_split_range = n_image_splits * image_width
+                        n_image_splits = n_window_splits // slices
+                        image_split_range = n_image_splits * slices
 
                         if n_image_splits > 0:
                             ride_image_list = np.array_split(ride_images[:, :image_split_range, :], n_image_splits, axis=1)
@@ -606,10 +606,10 @@ def fourier_transform(dir, target_region=None, in_memory_flag=True, deepsense_fl
                     if gps_flag:
                         gps = data[:, :, :, 6:8]
                         data_transformed = np.fft.fft(data[:, :, :, :-3], axis=1)
-                        data_transformed = np.concatenate((data_transformed, gps, np.reshape(label, (-1, fft_window, image_width, 1))), axis=3)
+                        data_transformed = np.concatenate((data_transformed, gps, np.reshape(label, (-1, fft_window, slices, 1))), axis=3)
                     else:
                         data_transformed = np.fft.fft(data[:, :, :, :-1], axis=1)
-                        data_transformed = np.concatenate((data_transformed, np.reshape(label, (-1, fft_window, image_width, 1))), axis=3)
+                        data_transformed = np.concatenate((data_transformed, np.reshape(label, (-1, fft_window, slices, 1))), axis=3)
 
                     data_transformed = data_transformed if imag_flag else np.real(data_transformed)
 
@@ -622,10 +622,10 @@ def fourier_transform(dir, target_region=None, in_memory_flag=True, deepsense_fl
                         if gps_flag:
                             gps = ride_data[:, :, 6:8]
                             ride_data_transformed = np.fft.fft(ride_data[:, :, :-3], axis=0)
-                            ride_data_transformed = np.concatenate((ride_data_transformed, gps, np.reshape(label, (fft_window, image_width, 1))), axis=2)
+                            ride_data_transformed = np.concatenate((ride_data_transformed, gps, np.reshape(label, (fft_window, slices, 1))), axis=2)
                         else:
                             ride_data_transformed = np.fft.fft(ride_data[:, :, :-1], axis=0)
-                            ride_data_transformed = np.concatenate((ride_data_transformed, np.reshape(label, (fft_window, image_width, 1))), axis=2)
+                            ride_data_transformed = np.concatenate((ride_data_transformed, np.reshape(label, (fft_window, slices, 1))), axis=2)
 
                         ride_data_transformed = ride_data_transformed if imag_flag else np.real(ride_data_transformed)
                         ride_data_dict.update({file: ride_data_transformed})
@@ -640,7 +640,7 @@ def fourier_transform(dir, target_region=None, in_memory_flag=True, deepsense_fl
 
 
 def preprocess(dir, target_region=None, bucket_size=100, time_interval=100, interpolation_type='equidistant',
-               in_memory_flag=True, deepsense_flag=True, fft_window=8, image_width=20, data_augmentation_flag=False, imag_flag=False, gps_flag=False, class_counts_file='class_counts.csv'):
+               in_memory_flag=True, deepsense_flag=True, fft_window=5, slices=20, data_augmentation_flag=False, imag_flag=False, gps_flag=False, class_counts_file='class_counts.csv'):
     remove_invalid_rides(dir, target_region)
     remove_acc_outliers(dir, target_region)
     calc_vel_delta(dir, target_region)
@@ -648,7 +648,7 @@ def preprocess(dir, target_region=None, bucket_size=100, time_interval=100, inte
     remove_vel_outliers(dir, target_region)
     remove_empty_rows(dir, target_region)
     scale(dir, target_region)
-    create_buckets(dir, target_region, bucket_size, in_memory_flag, deepsense_flag, fft_window, image_width, data_augmentation_flag, gps_flag, class_counts_file)
+    create_buckets(dir, target_region, bucket_size, in_memory_flag, deepsense_flag, fft_window, slices, data_augmentation_flag, gps_flag, class_counts_file)
     fourier_transform(dir, target_region, in_memory_flag, deepsense_flag, imag_flag, gps_flag)
 
 if __name__ == '__main__':
@@ -659,10 +659,10 @@ if __name__ == '__main__':
     interpolation_type = 'equidistant'
     deepsense_flag = True
     fft_window = 5
-    image_width = 20
+    slices = 20
     in_memory_flag = True
     data_augmentation_flag = False
     imag_flag = False
     gps_flag = False
     class_counts_file = 'class_counts.csv'
-    preprocess(dir, target_region, bucket_size, time_interval, interpolation_type, in_memory_flag, deepsense_flag, fft_window, image_width, data_augmentation_flag, imag_flag, gps_flag, class_counts_file)
+    preprocess(dir, target_region, bucket_size, time_interval, interpolation_type, in_memory_flag, deepsense_flag, fft_window, slices, data_augmentation_flag, imag_flag, gps_flag, class_counts_file)
