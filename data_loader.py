@@ -30,11 +30,11 @@ def data_gen(dir, split, target_region):
             yield x, y
 
 
-def create_ds(dir, target_region, split, batch_size=32, in_memory=True, deepsense=True, count=False,
+def create_ds(dir, target_region, split, batch_size=32, in_memory_flag=True, deepsense_flag=True, count=False,
               class_counts_file='class_counts.csv'):
-    if deepsense:
+    if deepsense_flag:
 
-        if in_memory:
+        if in_memory_flag:
 
             with np.load(os.path.join(dir, split, target_region + '.npz')) as data:
                 y = tf.cast(data['arr_0'][:, :, :, -1], tf.dtypes.int32)
@@ -64,7 +64,7 @@ def create_ds(dir, target_region, split, batch_size=32, in_memory=True, deepsens
 
     else:
 
-        if not in_memory and split == 'train':
+        if not in_memory_flag and split == 'train':
             warnings.warn('if deepsense is False data is always processed in_memory')
 
         pos_counter = float(len(glob.glob(os.path.join(dir, split, target_region, '*_bucket_incident.csv'))))
@@ -88,15 +88,15 @@ def create_ds(dir, target_region, split, batch_size=32, in_memory=True, deepsens
         return ds
 
 
-def load_data(dir, target_region, input_shape=(None, 5, 20, 3, 2), batch_size=32, in_memory=True, deepsense=True,
+def load_data(dir, target_region, input_shape=(None, 5, 20, 3, 2), batch_size=32, in_memory_flag=True, deepsense_flag=True,
               class_counts_file='class_counts.csv'):
     global input_shape_global
     input_shape_global = input_shape
 
-    train_ds, pos_train_counter, neg_train_counter = create_ds(dir, target_region, 'train', batch_size, in_memory,
-                                                               deepsense, True, class_counts_file)
-    val_ds = create_ds(dir, target_region, 'val', batch_size, in_memory, deepsense, False, class_counts_file)
-    test_ds = create_ds(dir, target_region, 'test', batch_size, in_memory, deepsense, False, class_counts_file)
+    train_ds, pos_train_counter, neg_train_counter = create_ds(dir, target_region, 'train', batch_size, in_memory_flag,
+                                                               deepsense_flag, True, class_counts_file)
+    val_ds = create_ds(dir, target_region, 'val', batch_size, in_memory_flag, deepsense_flag, False, class_counts_file)
+    test_ds = create_ds(dir, target_region, 'test', batch_size, in_memory_flag, deepsense_flag, False, class_counts_file)
 
     weight_for_0 = (1 / neg_train_counter) * ((pos_train_counter + neg_train_counter) / 2.0)
     weight_for_1 = (1 / pos_train_counter) * ((pos_train_counter + neg_train_counter) / 2.0)

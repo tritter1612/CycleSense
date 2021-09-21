@@ -29,11 +29,11 @@ class CNN_LSTM_(tf.keras.models.Sequential):
 
 class DeepSense(tf.keras.Model):
 
-    def __init__(self, input_shape=(None, 5, 20, 3, 1), output_bias=None, imag=False, gps=False):
+    def __init__(self, input_shape=(None, 5, 20, 3, 1), output_bias=None, imag_flag=False, gps_flag=False):
         super(DeepSense, self).__init__()
 
-        self.imag = imag
-        self.gps = gps
+        self.imag_flag = imag_flag
+        self.gps_flag = gps_flag
 
         if output_bias is not None:
             output_bias = tf.keras.initializers.Constant(output_bias)
@@ -117,7 +117,7 @@ class DeepSense(tf.keras.Model):
 
     def call(self, x, training):
 
-        if self.gps:
+        if self.gps_flag:
             # split sensors
             acc, gyro, gps = tf.split(x, num_or_size_splits=3, axis=3)
             gps = gps[:, :, :, :2]
@@ -125,7 +125,7 @@ class DeepSense(tf.keras.Model):
         else:
             acc, gyro = x[:, :, :, :3], x[:, :, :, 3:6]
 
-        if self.imag:
+        if self.imag_flag:
             # split real and imaginary part of complex accelerometer and gyroscope data
             acc_real = tf.math.real(acc)
             acc_imag = tf.math.imag(acc)
@@ -138,7 +138,7 @@ class DeepSense(tf.keras.Model):
             acc = acc[:, :, :, :, tf.newaxis]
             gyro = gyro[:, :, :, :, tf.newaxis]
 
-        if self.gps:
+        if self.gps_flag:
             gps = tf.math.real(gps)[:, :, :, :, tf.newaxis]
 
         acc_conv1 = self.acc_conv1(acc)
@@ -181,7 +181,7 @@ class DeepSense(tf.keras.Model):
 
         gyro = add([gyro_conv3, gyro_shortcut])
 
-        if self.gps:
+        if self.gps_flag:
             gps = gps[:, :, :, :, tf.newaxis]
 
             gps_conv1 = self.gps_conv1(gps)
@@ -247,11 +247,11 @@ class DeepSense(tf.keras.Model):
 
 
 def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, input_shape_feature_net=(None, 5, 20, 3, 1),
-          deepsense=True, imag=False, gps=False, checkpoint_dir='checkpoints/cnn/training'):
+          deepsense_flag=True, imag_flag=False, gps_flag=False, checkpoint_dir='checkpoints/cnn/training'):
     initial_bias = np.log(class_weight[0] / class_weight[1])
 
-    if deepsense:
-        model = DeepSense(input_shape_feature_net, initial_bias, imag=imag, gps=gps)
+    if deepsense_flag:
+        model = DeepSense(input_shape_feature_net, initial_bias, imag_flag=imag_flag, gps_flag=gps_flag)
 
     else:
         model = CNN_LSTM_()
@@ -324,20 +324,20 @@ if __name__ == '__main__':
     target_region = 'Berlin'
     bucket_size = 100
     batch_size = 128
-    in_memory = True
+    in_memory_flag = True
     num_epochs = 100
     patience = 10
-    deepsense = True
+    deepsense_flag = True
     fft_window = 5
     image_width = 20
-    imag = False
-    gps = False
+    imag_flag = False
+    gps_flag = False
     class_counts_file = os.path.join(dir, 'class_counts.csv')
 
-    if deepsense:
+    if deepsense_flag:
         input_shape = (None, fft_window, image_width, 3, 1)
     else:
         input_shape = (None, 4, int(bucket_size / 4), 8)
 
-    train_ds, val_ds, test_ds, class_weight = load_data(dir, target_region, input_shape, batch_size, in_memory, deepsense, class_counts_file)
-    train(train_ds, val_ds, test_ds, class_weight, num_epochs, patience, input_shape, deepsense, imag, gps, checkpoint_dir)
+    train_ds, val_ds, test_ds, class_weight = load_data(dir, target_region, input_shape, batch_size, in_memory_flag, deepsense_flag, class_counts_file)
+    train(train_ds, val_ds, test_ds, class_weight, num_epochs, patience, input_shape, deepsense_flag, imag_flag, gps_flag, checkpoint_dir)

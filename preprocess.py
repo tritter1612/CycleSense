@@ -8,6 +8,7 @@ from tqdm.auto import tqdm
 from sklearn.preprocessing import MaxAbsScaler
 import math
 from functools import partial
+import joblib
 
 
 def remove_invalid_rides(dir, target_region=None):
@@ -450,8 +451,8 @@ def create_buckets_inner(bucket_size, file):
     os.remove(file)
 
 
-def create_buckets(dir, target_region=None, bucket_size=22, in_memory=True, deepsense=False, fft_window=8, image_width=20,
-                   data_augmentation=False, imag=False, gps=False, class_counts_file='class_counts.csv'):
+def create_buckets(dir, target_region=None, bucket_size=22, in_memory_flag=True, deepsense_flag=False, fft_window=5, image_width=20,
+                   data_augmentation_flag=False, gps_flag=False, class_counts_file='class_counts.csv'):
     class_counts_df = pd.DataFrame()
 
     for split in ['train', 'test', 'val']:
@@ -469,7 +470,7 @@ def create_buckets(dir, target_region=None, bucket_size=22, in_memory=True, deep
 
             pos_counter, neg_counter = 0, 0
 
-            if deepsense:
+            if deepsense_flag:
 
                 for file in file_list:
 
@@ -511,33 +512,26 @@ def create_buckets(dir, target_region=None, bucket_size=22, in_memory=True, deep
                             incident_list = np.array_split(incident[:, :image_split_range, :], n_image_splits, axis=1)
 
                             for i, ride_image in enumerate(ride_image_list):
-                                # apply fourier transformation to data
-                                ride_image_transformed = np.fft.fft(ride_image, axis=0)
 
-                                if imag == False:
-                                    ride_image_transformed = np.real(ride_image_transformed)
-
-                                if gps:
+                                if gps_flag:
                                     # append lat, lon & incident
-                                    ride_image_transformed = np.dstack(
-                                        (ride_image_transformed, lat_list[i], lon_list[i], incident_list[i]))
+                                    ride_image = np.dstack((ride_image, lat_list[i], lon_list[i], incident_list[i]))
 
                                 else:
                                     # append incident
-                                    ride_image_transformed = np.dstack(
-                                        (ride_image_transformed, incident_list[i]))
+                                    ride_image = np.dstack((ride_image, incident_list[i]))
 
-                                if np.any(ride_image_transformed[:, :, -1]) > 0:
-                                    ride_image_transformed[:, :, -1] = 1  # TODO: Maybe preserve incident type
+                                if np.any(ride_image[:, :, -1]) > 0:
+                                    ride_image[:, :, -1] = 1  # TODO: Maybe preserve incident type
                                     pos_counter += 1
 
-                                    if split == 'train' and data_augmentation:
-                                        ride_image_rotated_X = augment_data(ride_image_transformed, axis=0)
-                                        ride_image_rotated_Y = augment_data(ride_image_transformed, axis=1)
-                                        ride_image_rotated_Z = augment_data(ride_image_transformed, axis=2)
+                                    if split == 'train' and data_augmentation_flag:
+                                        ride_image_rotated_X = augment_data(ride_image, axis=0)
+                                        ride_image_rotated_Y = augment_data(ride_image, axis=1)
+                                        ride_image_rotated_Z = augment_data(ride_image, axis=2)
                                         pos_counter += 3
 
-                                        if in_memory:
+                                        if in_memory_flag:
                                             ride_images_list.append(ride_image_rotated_X)
                                             ride_images_list.append(ride_image_rotated_Y)
                                             ride_images_list.append(ride_image_rotated_Z)
@@ -550,22 +544,21 @@ def create_buckets(dir, target_region=None, bucket_size=22, in_memory=True, deep
                                             dict_name_rotated_Z = os.path.basename(file).replace('.csv', '') +  '_no' + str(i).zfill(5) + '_rotated_Z_bucket_incident'
                                             ride_images_dict.update({dict_name_rotated_Z: ride_image_rotated_Z})
 
-                                    if in_memory:
-                                        ride_images_list.append(ride_image_transformed)
+                                    if in_memory_flag:
+                                        ride_images_list.append(ride_image)
 
                                     else:
                                         dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(5) + '_bucket_incident'
-                                        ride_images_dict.update({dict_name: ride_image_transformed})
+                                        ride_images_dict.update({dict_name: ride_image})
 
                                 else:
-                                    ride_image_transformed[:, :, -1] = 0
+                                    ride_image[:, :, -1] = 0
                                     neg_counter += 1
-                                    if in_memory:
-                                        ride_images_list.append(ride_image_transformed)
+                                    if in_memory_flag:
+                                        ride_images_list.append(ride_image)
                                     else:
-                                        dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(
-                                            5) + '_bucket'
-                                        ride_images_dict.update({dict_name: ride_image_transformed})
+                                        dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(5) + '_bucket'
+                                        ride_images_dict.update({dict_name: ride_image})
 
                     class_counts_df[split + '_' + region] = [pos_counter, neg_counter]
 
@@ -575,7 +568,7 @@ def create_buckets(dir, target_region=None, bucket_size=22, in_memory=True, deep
 
                 os.rmdir(subdir)
 
-                if in_memory:
+                if in_memory_flag:
                     np.savez(os.path.join(dir, split, region + '.npz'), ride_images_list)
                 else:
                     np.savez(os.path.join(dir, split, region + '.npz'), **ride_images_dict)
@@ -585,8 +578,65 @@ def create_buckets(dir, target_region=None, bucket_size=22, in_memory=True, deep
                     pool.map(partial(create_buckets_inner, bucket_size), file_list)
 
 
+def fourier_transform(dir, target_region=None, in_memory_flag=True, deepsense_flag=False, imag_flag=False, gps_flag=False):
+
+    for split in ['train', 'test', 'val']:
+
+        for subdir in tqdm(glob.glob(os.path.join(dir, split, '*.npz')),
+                           desc='apply fourier transform to {} data'.format(split)):
+            region = os.path.basename(subdir).replace('.npz','')
+
+            if target_region is not None and target_region != region:
+                continue
+
+            ride_data_dict = {}
+
+            if deepsense_flag:
+
+                if in_memory_flag:
+                    data_loaded = np.load(os.path.join(dir, split, region + '.npz'))
+                    data = data_loaded['arr_0']
+
+                    label = data[:, :, :, -1]
+
+                    if gps_flag:
+                        gps = data[:, :, :, 6:8]
+                        data_transformed = np.fft.fft(data[:, :, :, :-3], axis=1)
+                        data_transformed = np.concatenate((data_transformed, gps, np.reshape(label, (-1, fft_window, image_width, 1))), axis=3)
+                    else:
+                        data_transformed = np.fft.fft(data[:, :, :, :-1], axis=1)
+                        data_transformed = np.concatenate((data_transformed, np.reshape(label, (-1, fft_window, image_width, 1))), axis=3)
+
+                    data_transformed = data_transformed if imag_flag else np.real(data_transformed)
+
+                else:
+                    data_loaded = np.load(os.path.join(dir, split, target_region + '.npz'))
+                    for file in data_loaded.files:
+                        ride_data = data_loaded[file]
+                        label = ride_data[:, :, -1]
+
+                        if gps_flag:
+                            gps = ride_data[:, :, 6:8]
+                            ride_data_transformed = np.fft.fft(ride_data[:, :, :-3], axis=0)
+                            ride_data_transformed = np.concatenate((ride_data_transformed, gps, np.reshape(label, (fft_window, image_width, 1))), axis=2)
+                        else:
+                            ride_data_transformed = np.fft.fft(ride_data[:, :, :-1], axis=0)
+                            ride_data_transformed = np.concatenate((ride_data_transformed, np.reshape(label, (fft_window, image_width, 1))), axis=2)
+
+                        ride_data_transformed = ride_data_transformed if imag_flag else np.real(ride_data_transformed)
+                        ride_data_dict.update({file: ride_data_transformed})
+
+                if in_memory_flag:
+                    np.savez(os.path.join(dir, split, region + '.npz'), data_transformed)
+                else:
+                    np.savez(os.path.join(dir, split, region + '.npz'), **ride_data_dict)
+
+            else:
+                return
+
+
 def preprocess(dir, target_region=None, bucket_size=100, time_interval=100, interpolation_type='equidistant',
-               in_memory=True, deepsense=True, fft_window=8, image_width=20, data_augmentation=False, imag=False, gps=False, class_counts_file='class_counts.csv'):
+               in_memory_flag=True, deepsense_flag=True, fft_window=8, image_width=20, data_augmentation_flag=False, imag_flag=False, gps_flag=False, class_counts_file='class_counts.csv'):
     remove_invalid_rides(dir, target_region)
     remove_acc_outliers(dir, target_region)
     calc_vel_delta(dir, target_region)
@@ -594,8 +644,8 @@ def preprocess(dir, target_region=None, bucket_size=100, time_interval=100, inte
     remove_vel_outliers(dir, target_region)
     remove_empty_rows(dir, target_region)
     scale(dir, target_region)
-    create_buckets(dir, target_region, bucket_size, in_memory, deepsense, fft_window, image_width, data_augmentation, imag, gps, class_counts_file)
-
+    create_buckets(dir, target_region, bucket_size, in_memory_flag, deepsense_flag, fft_window, image_width, data_augmentation_flag, gps_flag, class_counts_file)
+    fourier_transform(dir, target_region, in_memory_flag, deepsense_flag, imag_flag, gps_flag)
 
 if __name__ == '__main__':
     dir = '../Ride_Data'
@@ -603,12 +653,12 @@ if __name__ == '__main__':
     bucket_size = 100
     time_interval = 100
     interpolation_type = 'equidistant'
-    deepsense = True
+    deepsense_flag = True
     fft_window = 5
     image_width = 20
-    in_memory = True
-    data_augmentation = False
-    imag = False
-    gps = False
+    in_memory_flag = True
+    data_augmentation_flag = False
+    imag_flag = False
+    gps_flag = False
     class_counts_file = 'class_counts.csv'
-    preprocess(dir, target_region, bucket_size, time_interval, interpolation_type, in_memory, deepsense, fft_window, image_width, data_augmentation, imag, gps, class_counts_file)
+    preprocess(dir, target_region, bucket_size, time_interval, interpolation_type, in_memory_flag, deepsense_flag, fft_window, image_width, data_augmentation_flag, imag_flag, gps_flag, class_counts_file)
