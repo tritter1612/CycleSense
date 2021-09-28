@@ -107,7 +107,7 @@ class DeepSense(tf.keras.Model):
 
         self.sensor_shortcut = Conv3D(64, kernel_size=(3, 3, 1), activation=None, padding='same')
 
-        self.sensor_reshape = Reshape((input_shape[2] - 2, (input_shape[1] - 2) * (2 + self.gps) * 64))
+        self.sensor_reshape = Reshape((input_shape[2] - 2, (input_shape[1] - 2) * (2 + self.gps_flag) * 64))
 
         self.sensor_gru1 = GRUCell(120, dropout=0.5, activation=None)
         self.sensor_gru2 = GRUCell(120, dropout=0.5, activation=None)

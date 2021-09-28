@@ -363,7 +363,7 @@ def scale(dir, target_region=None):
 
     scaler_file = os.path.join(dir, 'scaler.save')
 
-    if scaler_file.isfile():
+    if os.path.isfile(scaler_file):
         scaler_maxabs = joblib.load(scaler_file)
     else:
         for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')), desc='fit scaler'):

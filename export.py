@@ -190,7 +190,7 @@ def export(data_dir, target_dir, target_region=None):
         file_list = []
         file_names = set()
 
-        root = os.path.join(data_dir, subdir, 'Rides')
+        root = os.path.join(data_dir, region, 'Rides')
 
         for path, sd, files in os.walk(root):
             for name in files:
