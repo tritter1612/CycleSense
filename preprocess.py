@@ -142,7 +142,7 @@ def linear_interpolate(file):
         lambda x: dt.datetime.utcfromtimestamp(x / 1000))
 
     # set timeStamp col as pandas datetime index
-    df['timeStamp'] = pd.to_datetime(df['timeStamp'], unit='ns')
+    df['timeStamp'] = pd.to_datetime(df['timeStamp'], unit='ms')
 
     df = df.set_index(pd.DatetimeIndex(df['timeStamp']))
 
@@ -162,7 +162,8 @@ def linear_interpolate(file):
 
     df.sort_index(axis=0, ascending=True, inplace=True)
 
-    df['timeStamp'] = df.index.astype(np.int64)
+    # convert timestamp back to unix timestamp format in milliseconds
+    df['timeStamp'] = df.index.astype(np.int64) // 10 ** 6
 
     df.to_csv(file, ',', index=False)
 
@@ -348,6 +349,9 @@ def remove_empty_rows(dir, target_region=None):
             for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
 
                 df = pd.read_csv(file)
+                if not gps_flag:
+                    df['lat'] = 0.0
+                    df['lon'] = 0.0
                 df.dropna(inplace=True, axis=0)
 
                 if len(df) != 0:
@@ -480,89 +484,93 @@ def create_buckets(dir, target_region=None, bucket_size=100, in_memory_flag=True
 
                     arr = np.genfromtxt(file, delimiter=',', skip_header=True)
 
-                    lat = arr[:, 0]
-                    lat = lat[:, np.newaxis]
-                    lon = arr[:, 1]
-                    lon = lon[:, np.newaxis]
-                    incident = arr[:, -1]
-                    incident = incident[:, np.newaxis]
+                    try:
 
-                    # remove lat, lon
-                    arr = arr[:, 2:]
+                        lat = arr[:, 0]
+                        lat = lat[:, np.newaxis]
+                        lon = arr[:, 1]
+                        lon = lon[:, np.newaxis]
+                        incident = arr[:, -1]
+                        incident = incident[:, np.newaxis]
 
-                    # remove incident
-                    arr = arr[:, :-1]
+                        # remove lat, lon
+                        arr = arr[:, 2:]
 
-                    # remove timestamp
-                    arr = np.concatenate((arr[:, :3], arr[:, 4:]), axis=1)
+                        # remove incident
+                        arr = arr[:, :-1]
 
-                    n_window_splits = arr.shape[0] // fft_window
-                    window_split_range = n_window_splits * fft_window
+                        # remove timestamp
+                        arr = np.concatenate((arr[:, :3], arr[:, 4:]), axis=1)
 
-                    if n_window_splits > 0:
+                        n_window_splits = arr.shape[0] // fft_window
+                        window_split_range = n_window_splits * fft_window
 
-                        ride_images = np.stack(np.vsplit(arr[:window_split_range], n_window_splits), axis=1)
-                        lat = np.stack(np.vsplit(lat[:window_split_range], n_window_splits), axis=1)
-                        lon = np.stack(np.vsplit(lon[:window_split_range], n_window_splits), axis=1)
-                        incident = np.stack(np.vsplit(incident[:window_split_range], n_window_splits), axis=1)
+                        if n_window_splits > 0:
 
-                        n_image_splits = n_window_splits // slices
-                        image_split_range = n_image_splits * slices
+                            ride_images = np.stack(np.vsplit(arr[:window_split_range], n_window_splits), axis=1)
+                            lat = np.stack(np.vsplit(lat[:window_split_range], n_window_splits), axis=1)
+                            lon = np.stack(np.vsplit(lon[:window_split_range], n_window_splits), axis=1)
+                            incident = np.stack(np.vsplit(incident[:window_split_range], n_window_splits), axis=1)
 
-                        if n_image_splits > 0:
-                            ride_image_list = np.array_split(ride_images[:, :image_split_range, :], n_image_splits, axis=1)
-                            lat_list = np.array_split(lat[:, :image_split_range, :], n_image_splits, axis=1)
-                            lon_list = np.array_split(lon[:, :image_split_range, :], n_image_splits, axis=1)
-                            incident_list = np.array_split(incident[:, :image_split_range, :], n_image_splits, axis=1)
+                            n_image_splits = n_window_splits // slices
+                            image_split_range = n_image_splits * slices
 
-                            for i, ride_image in enumerate(ride_image_list):
+                            if n_image_splits > 0:
+                                ride_image_list = np.array_split(ride_images[:, :image_split_range, :], n_image_splits, axis=1)
+                                lat_list = np.array_split(lat[:, :image_split_range, :], n_image_splits, axis=1)
+                                lon_list = np.array_split(lon[:, :image_split_range, :], n_image_splits, axis=1)
+                                incident_list = np.array_split(incident[:, :image_split_range, :], n_image_splits, axis=1)
 
-                                if gps_flag:
-                                    # append lat, lon & incident
-                                    ride_image = np.dstack((ride_image, lat_list[i], lon_list[i], incident_list[i]))
+                                for i, ride_image in enumerate(ride_image_list):
 
-                                else:
-                                    # append incident
-                                    ride_image = np.dstack((ride_image, incident_list[i]))
+                                    if gps_flag:
+                                        # append lat, lon & incident
+                                        ride_image = np.dstack((ride_image, lat_list[i], lon_list[i], incident_list[i]))
 
-                                if np.any(ride_image[:, :, -1]) > 0:
-                                    ride_image[:, :, -1] = 1  # TODO: Maybe preserve incident type
-                                    pos_counter += 1
+                                    else:
+                                        # append incident
+                                        ride_image = np.dstack((ride_image, incident_list[i]))
 
-                                    if split == 'train' and data_augmentation_flag:
-                                        ride_image_rotated_X = augment_data(ride_image, axis=0)
-                                        ride_image_rotated_Y = augment_data(ride_image, axis=1)
-                                        ride_image_rotated_Z = augment_data(ride_image, axis=2)
-                                        pos_counter += 3
+                                    if np.any(ride_image[:, :, -1]) > 0:
+                                        ride_image[:, :, -1] = 1  # TODO: Maybe preserve incident type
+                                        pos_counter += 1
+
+                                        if split == 'train' and data_augmentation_flag:
+                                            ride_image_rotated_X = augment_data(ride_image, axis=0)
+                                            ride_image_rotated_Y = augment_data(ride_image, axis=1)
+                                            ride_image_rotated_Z = augment_data(ride_image, axis=2)
+                                            pos_counter += 3
+
+                                            if in_memory_flag:
+                                                ride_images_list.append(ride_image_rotated_X)
+                                                ride_images_list.append(ride_image_rotated_Y)
+                                                ride_images_list.append(ride_image_rotated_Z)
+
+                                            else:
+                                                dict_name_rotated_X = os.path.basename(file).replace('.csv', '') +  '_no' + str(i).zfill(5) + '_rotated_X_bucket_incident'
+                                                ride_images_dict.update({dict_name_rotated_X: ride_image_rotated_X})
+                                                dict_name_rotated_Y = os.path.basename(file).replace('.csv', '') +  '_no' + str(i).zfill(5) + '_rotated_Y_bucket_incident'
+                                                ride_images_dict.update({dict_name_rotated_Y: ride_image_rotated_Y})
+                                                dict_name_rotated_Z = os.path.basename(file).replace('.csv', '') +  '_no' + str(i).zfill(5) + '_rotated_Z_bucket_incident'
+                                                ride_images_dict.update({dict_name_rotated_Z: ride_image_rotated_Z})
 
                                         if in_memory_flag:
-                                            ride_images_list.append(ride_image_rotated_X)
-                                            ride_images_list.append(ride_image_rotated_Y)
-                                            ride_images_list.append(ride_image_rotated_Z)
+                                            ride_images_list.append(ride_image)
 
                                         else:
-                                            dict_name_rotated_X = os.path.basename(file).replace('.csv', '') +  '_no' + str(i).zfill(5) + '_rotated_X_bucket_incident'
-                                            ride_images_dict.update({dict_name_rotated_X: ride_image_rotated_X})
-                                            dict_name_rotated_Y = os.path.basename(file).replace('.csv', '') +  '_no' + str(i).zfill(5) + '_rotated_Y_bucket_incident'
-                                            ride_images_dict.update({dict_name_rotated_Y: ride_image_rotated_Y})
-                                            dict_name_rotated_Z = os.path.basename(file).replace('.csv', '') +  '_no' + str(i).zfill(5) + '_rotated_Z_bucket_incident'
-                                            ride_images_dict.update({dict_name_rotated_Z: ride_image_rotated_Z})
-
-                                    if in_memory_flag:
-                                        ride_images_list.append(ride_image)
+                                            dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(5) + '_bucket_incident'
+                                            ride_images_dict.update({dict_name: ride_image})
 
                                     else:
-                                        dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(5) + '_bucket_incident'
-                                        ride_images_dict.update({dict_name: ride_image})
-
-                                else:
-                                    ride_image[:, :, -1] = 0
-                                    neg_counter += 1
-                                    if in_memory_flag:
-                                        ride_images_list.append(ride_image)
-                                    else:
-                                        dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(5) + '_bucket'
-                                        ride_images_dict.update({dict_name: ride_image})
+                                        ride_image[:, :, -1] = 0
+                                        neg_counter += 1
+                                        if in_memory_flag:
+                                            ride_images_list.append(ride_image)
+                                        else:
+                                            dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(5) + '_bucket'
+                                            ride_images_dict.update({dict_name: ride_image})
+                    except:
+                        print(file)
 
                     class_counts_df[split + '_' + region] = [pos_counter, neg_counter]
 
@@ -641,11 +649,14 @@ def fourier_transform(dir, target_region=None, in_memory_flag=True, deepsense_fl
 
 def preprocess(dir, target_region=None, bucket_size=100, time_interval=100, interpolation_type='equidistant',
                in_memory_flag=True, deepsense_flag=True, fft_window=5, slices=20, data_augmentation_flag=False, imag_flag=False, gps_flag=False, class_counts_file='class_counts.csv'):
-    remove_invalid_rides(dir, target_region)
+    if gps_flag:
+        remove_invalid_rides(dir, target_region)
     remove_acc_outliers(dir, target_region)
-    calc_vel_delta(dir, target_region)
+    if gps_flag:
+        calc_vel_delta(dir, target_region)
     interpolate(dir, target_region, time_interval, interpolation_type)
-    remove_vel_outliers(dir, target_region)
+    if gps_flag:
+        remove_vel_outliers(dir, target_region)
     remove_empty_rows(dir, target_region)
     scale(dir, target_region)
     create_buckets(dir, target_region, bucket_size, in_memory_flag, deepsense_flag, fft_window, slices, data_augmentation_flag, gps_flag, class_counts_file)
