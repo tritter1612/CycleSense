@@ -34,7 +34,7 @@ def export_file(target_dir, split, file):
             ride_info_lines = ride_info.splitlines()
             incident_info_list = []
 
-            if len(ride_info_lines) < 4:
+            if len(ride_info_lines) < 5:
                 print('file {} has the wrong format'.format(file))
                 return
 
