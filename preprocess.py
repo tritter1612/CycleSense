@@ -163,7 +163,7 @@ def linear_interpolate(file):
     df.sort_index(axis=0, ascending=True, inplace=True)
 
     # convert timestamp back to unix timestamp format in milliseconds
-    df['timeStamp'] = df.index.astype(np.int64) // 10 ** 6
+    df['timeStamp'] = df.index.view(np.int64) // 10 ** 6
 
     df.to_csv(file, ',', index=False)
 
@@ -241,7 +241,7 @@ def equidistant_interpolate(time_interval, file):
     df = df.drop(removables)
 
     # convert timestamp back to unix timestamp format in milliseconds
-    df['timeStamp'] = df.index.astype(np.int64) // 10 ** 6
+    df['timeStamp'] = df.index.view(np.int64) // 10 ** 6
 
     df['incident'].fillna(0, inplace=True)
 
