@@ -23,14 +23,15 @@ def data_gen(dir, split, target_region):
     with np.load(os.path.join(dir, split, target_region)) as data:
         for file in data.files:
             y = tf.cast(data[file][:, :, -1], tf.dtypes.int32)
-            x = data[file][:, :, :, :-1]
+            x = data[file][:, :, :-1]
             y = tf.math.reduce_mean(y, axis=0)
             y = tf.math.reduce_mean(y, axis=0)
 
             yield x, y
 
 
-def create_ds(dir, target_region, split, batch_size=32, in_memory_flag=True, deepsense_flag=True, count=False,
+def create_ds(dir, target_region, split, batch_size=32, in_memory_flag=True, deepsense_flag=True, gps_flag=False,
+              count=False,
               class_counts_file='class_counts.csv'):
     if deepsense_flag:
 
@@ -50,7 +51,9 @@ def create_ds(dir, target_region, split, batch_size=32, in_memory_flag=True, dee
             ds = tf.data.Dataset.from_generator(data_gen, args=[dir, split, target_region + '.npz'],
                                                 output_signature=(
                                                     tf.TensorSpec(
-                                                        shape=(input_shape_global[1], input_shape_global[2], 9),
+                                                        shape=(
+                                                            input_shape_global[1], input_shape_global[2],
+                                                            6 + gps_flag * 2),
                                                         dtype=tf.complex64),
                                                     tf.TensorSpec(shape=(), dtype=tf.int32)
                                                 ))
@@ -88,15 +91,17 @@ def create_ds(dir, target_region, split, batch_size=32, in_memory_flag=True, dee
         return ds
 
 
-def load_data(dir, target_region, input_shape=(None, 5, 20, 3, 2), batch_size=32, in_memory_flag=True, deepsense_flag=True,
-              class_counts_file='class_counts.csv'):
+def load_data(dir, target_region, input_shape=(None, 5, 20, 3, 2), batch_size=32, in_memory_flag=True,
+              deepsense_flag=True, gps_flag=False, class_counts_file='class_counts.csv'):
     global input_shape_global
     input_shape_global = input_shape
 
     train_ds, pos_train_counter, neg_train_counter = create_ds(dir, target_region, 'train', batch_size, in_memory_flag,
-                                                               deepsense_flag, True, class_counts_file)
-    val_ds = create_ds(dir, target_region, 'val', batch_size, in_memory_flag, deepsense_flag, False, class_counts_file)
-    test_ds = create_ds(dir, target_region, 'test', batch_size, in_memory_flag, deepsense_flag, False, class_counts_file)
+                                                               deepsense_flag, gps_flag, True, class_counts_file)
+    val_ds = create_ds(dir, target_region, 'val', batch_size, in_memory_flag, deepsense_flag, gps_flag, False,
+                       class_counts_file)
+    test_ds = create_ds(dir, target_region, 'test', batch_size, in_memory_flag, deepsense_flag, gps_flag, False,
+                        class_counts_file)
 
     weight_for_0 = (1 / neg_train_counter) * ((pos_train_counter + neg_train_counter) / 2.0)
     weight_for_1 = (1 / pos_train_counter) * ((pos_train_counter + neg_train_counter) / 2.0)

@@ -622,7 +622,7 @@ def fourier_transform(dir, target_region=None, in_memory_flag=True, deepsense_fl
                     data_transformed = data_transformed if imag_flag else np.real(data_transformed)
 
                 else:
-                    data_loaded = np.load(os.path.join(dir, split, target_region + '.npz'))
+                    data_loaded = np.load(os.path.join(dir, split, region + '.npz'))
                     for file in data_loaded.files:
                         ride_data = data_loaded[file]
                         label = ride_data[:, :, -1]
