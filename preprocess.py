@@ -614,12 +614,23 @@ def fourier_transform(dir, target_region=None, in_memory_flag=True, deepsense_fl
                     if gps_flag:
                         gps = data[:, :, :, 6:8]
                         data_transformed = np.fft.fft(data[:, :, :, :-3], axis=1)
-                        data_transformed = np.concatenate((data_transformed, gps, np.reshape(label, (-1, fft_window, slices, 1))), axis=3)
+                        data_transformed_real = np.real(data_transformed)
+                        data_transformed_imag = np.imag(data_transformed)
+
+                        if imag_flag:
+                            data_transformed = np.concatenate((data_transformed_real, data_transformed_imag, gps, np.reshape(label, (-1, fft_window, slices, 1))), axis=3)
+                        else:
+                            data_transformed = np.concatenate((data_transformed_real, gps, np.reshape(label, (-1, fft_window, slices, 1))), axis=3)
+
                     else:
                         data_transformed = np.fft.fft(data[:, :, :, :-1], axis=1)
-                        data_transformed = np.concatenate((data_transformed, np.reshape(label, (-1, fft_window, slices, 1))), axis=3)
+                        data_transformed_real = np.real(data_transformed)
+                        data_transformed_imag = np.imag(data_transformed)
 
-                    data_transformed = data_transformed if imag_flag else np.real(data_transformed)
+                        if imag_flag:
+                            data_transformed = np.concatenate((data_transformed_real, data_transformed_imag, np.reshape(label, (-1, fft_window, slices, 1))), axis=3)
+                        else:
+                            data_transformed = np.concatenate((data_transformed_real, np.reshape(label, (-1, fft_window, slices, 1))), axis=3)
 
                 else:
                     data_loaded = np.load(os.path.join(dir, split, region + '.npz'))
@@ -630,12 +641,25 @@ def fourier_transform(dir, target_region=None, in_memory_flag=True, deepsense_fl
                         if gps_flag:
                             gps = ride_data[:, :, 6:8]
                             ride_data_transformed = np.fft.fft(ride_data[:, :, :-3], axis=0)
-                            ride_data_transformed = np.concatenate((ride_data_transformed, gps, np.reshape(label, (fft_window, slices, 1))), axis=2)
+
+                            data_transformed_real = np.real(ride_data_transformed)
+                            data_transformed_imag = np.imag(ride_data_transformed)
+
+                            if imag_flag:
+                                ride_data_transformed = np.concatenate((data_transformed_real, data_transformed_imag, gps, np.reshape(label, (fft_window, slices, 1))), axis=2)
+                            else:
+                                ride_data_transformed = np.concatenate((data_transformed_real, gps, np.reshape(label, (fft_window, slices, 1))), axis=2)
                         else:
                             ride_data_transformed = np.fft.fft(ride_data[:, :, :-1], axis=0)
-                            ride_data_transformed = np.concatenate((ride_data_transformed, np.reshape(label, (fft_window, slices, 1))), axis=2)
 
-                        ride_data_transformed = ride_data_transformed if imag_flag else np.real(ride_data_transformed)
+                            data_transformed_real = np.real(ride_data_transformed)
+                            data_transformed_imag = np.imag(ride_data_transformed)
+
+                            if imag_flag:
+                                ride_data_transformed = np.concatenate((data_transformed_real, data_transformed_imag, np.reshape(label, (fft_window, slices, 1))), axis=2)
+                            else:
+                                ride_data_transformed = np.concatenate((data_transformed_real, np.reshape(label, (fft_window, slices, 1))), axis=2)
+
                         ride_data_dict.update({file: ride_data_transformed})
 
                 if in_memory_flag:
@@ -673,7 +697,7 @@ if __name__ == '__main__':
     slices = 20
     in_memory_flag = True
     data_augmentation_flag = False
-    imag_flag = False
-    gps_flag = False
+    imag_flag = True
+    gps_flag = True
     class_counts_file = 'class_counts.csv'
     preprocess(dir, target_region, bucket_size, time_interval, interpolation_type, in_memory_flag, deepsense_flag, fft_window, slices, data_augmentation_flag, imag_flag, gps_flag, class_counts_file)
