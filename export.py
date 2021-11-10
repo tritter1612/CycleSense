@@ -204,7 +204,7 @@ def export(data_dir, target_dir, target_region=None):
 
         train, val, test = np.split(df.sample(frac=1, random_state=42), [int(.6 * len(df)), int(.8 * len(df))])
 
-        with mp.Pool(4) as pool:
+        with mp.Pool(mp.cpu_count()) as pool:
             pool.map(partial(export_file, target_dir, 'train'), train.values)
             pool.map(partial(export_file, target_dir, 'val'), val.values)
             pool.map(partial(export_file, target_dir, 'test'), test.values)

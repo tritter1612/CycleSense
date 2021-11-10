@@ -102,7 +102,7 @@ def remove_acc_outliers(dir, target_region=None):
 
             file_list = glob.glob(os.path.join(subdir, 'VM2_*.csv'))
 
-            with mp.Pool(4) as pool:
+            with mp.Pool(mp.cpu_count()) as pool:
                 pool.map(partial(remove_acc_outliers_inner, lower, upper), file_list)
 
 
@@ -260,7 +260,7 @@ def interpolate(dir, target_region=None, time_interval=100, interpolation_type='
 
             file_list = glob.glob(os.path.join(subdir, 'VM2_*.csv'))
 
-            with mp.Pool(4) as pool:
+            with mp.Pool(mp.cpu_count()) as pool:
 
                 if interpolation_type == 'linear':
                     pool.map(linear_interpolate, file_list)
@@ -586,7 +586,7 @@ def create_buckets(dir, target_region=None, bucket_size=100, in_memory_flag=True
                     np.savez(os.path.join(dir, split, region + '.npz'), **ride_images_dict)
 
             else:
-                with mp.Pool(4) as pool:
+                with mp.Pool(mp.cpu_count()) as pool:
                     pool.map(partial(create_buckets_inner, bucket_size), file_list)
 
 
@@ -678,7 +678,7 @@ def fourier_transform(dir, target_region=None, in_memory_flag=True, deepsense_fl
                     data_loaded = np.load(os.path.join(dir, split, region + '.npz'))
                     file_list_splits = np.array_split(data_loaded.files, len(data_loaded.files))
 
-                    with mp.Pool(4) as pool:
+                    with mp.Pool(mp.cpu_count()) as pool:
                         results = pool.map(partial(fourier_transform_off_memory, dir, split, region, fft_window, slices, gps_flag, imag_flag), file_list_splits)
                         ride_data_dict = {}
                         for result in results:
