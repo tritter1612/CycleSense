@@ -590,6 +590,48 @@ def create_buckets(dir, target_region=None, bucket_size=100, in_memory_flag=True
                     pool.map(partial(create_buckets_inner, bucket_size), file_list)
 
 
+def fourier_transform_off_memory(dir, split, region, fft_window, slices, gps_flag, imag_flag, file_list):
+
+    ride_data_dict = {}
+
+    data_loaded = np.load(os.path.join(dir, split, region + '.npz'))
+
+    for file in file_list:
+        ride_data = data_loaded[file]
+        label = ride_data[:, :, -1]
+
+        if gps_flag:
+            gps = ride_data[:, :, 6:8]
+            ride_data_transformed = np.fft.fft(ride_data[:, :, :-3], axis=0)
+
+            data_transformed_real = np.real(ride_data_transformed)
+            data_transformed_imag = np.imag(ride_data_transformed)
+
+            if imag_flag:
+                ride_data_transformed = np.concatenate(
+                    (data_transformed_real, data_transformed_imag, gps, np.reshape(label, (fft_window, slices, 1))),
+                    axis=2)
+            else:
+                ride_data_transformed = np.concatenate(
+                    (data_transformed_real, gps, np.reshape(label, (fft_window, slices, 1))), axis=2)
+        else:
+            ride_data_transformed = np.fft.fft(ride_data[:, :, :-1], axis=0)
+
+            data_transformed_real = np.real(ride_data_transformed)
+            data_transformed_imag = np.imag(ride_data_transformed)
+
+            if imag_flag:
+                ride_data_transformed = np.concatenate(
+                    (data_transformed_real, data_transformed_imag, np.reshape(label, (fft_window, slices, 1))), axis=2)
+            else:
+                ride_data_transformed = np.concatenate(
+                    (data_transformed_real, np.reshape(label, (fft_window, slices, 1))), axis=2)
+
+        ride_data_dict.update({file: ride_data_transformed})
+
+    return ride_data_dict
+
+
 def fourier_transform(dir, target_region=None, in_memory_flag=True, deepsense_flag=False, imag_flag=False, gps_flag=False):
 
     for split in ['train', 'test', 'val']:
@@ -634,33 +676,13 @@ def fourier_transform(dir, target_region=None, in_memory_flag=True, deepsense_fl
 
                 else:
                     data_loaded = np.load(os.path.join(dir, split, region + '.npz'))
-                    for file in data_loaded.files:
-                        ride_data = data_loaded[file]
-                        label = ride_data[:, :, -1]
+                    file_list_splits = np.array_split(data_loaded.files, len(data_loaded.files))
 
-                        if gps_flag:
-                            gps = ride_data[:, :, 6:8]
-                            ride_data_transformed = np.fft.fft(ride_data[:, :, :-3], axis=0)
-
-                            data_transformed_real = np.real(ride_data_transformed)
-                            data_transformed_imag = np.imag(ride_data_transformed)
-
-                            if imag_flag:
-                                ride_data_transformed = np.concatenate((data_transformed_real, data_transformed_imag, gps, np.reshape(label, (fft_window, slices, 1))), axis=2)
-                            else:
-                                ride_data_transformed = np.concatenate((data_transformed_real, gps, np.reshape(label, (fft_window, slices, 1))), axis=2)
-                        else:
-                            ride_data_transformed = np.fft.fft(ride_data[:, :, :-1], axis=0)
-
-                            data_transformed_real = np.real(ride_data_transformed)
-                            data_transformed_imag = np.imag(ride_data_transformed)
-
-                            if imag_flag:
-                                ride_data_transformed = np.concatenate((data_transformed_real, data_transformed_imag, np.reshape(label, (fft_window, slices, 1))), axis=2)
-                            else:
-                                ride_data_transformed = np.concatenate((data_transformed_real, np.reshape(label, (fft_window, slices, 1))), axis=2)
-
-                        ride_data_dict.update({file: ride_data_transformed})
+                    with mp.Pool(4) as pool:
+                        results = pool.map(partial(fourier_transform_off_memory, dir, split, region, fft_window, slices, gps_flag, imag_flag), file_list_splits)
+                        ride_data_dict = {}
+                        for result in results:
+                            ride_data_dict.update(result)
 
                 if in_memory_flag:
                     np.savez(os.path.join(dir, split, region + '.npz'), data_transformed)
