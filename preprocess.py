@@ -37,6 +37,27 @@ def remove_invalid_rides(dir, target_region=None):
                     os.remove(file)
 
 
+def remove_sensor_values_from_gps_timestamps(dir, target_region=None):
+    for split in ['train', 'test', 'val']:
+
+        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
+                           desc='remove sensor values from gps timestamp rides in {} data'.format(split)):
+            region = os.path.basename(subdir)
+
+            if target_region is not None and target_region != region:
+                continue
+
+            for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
+                df = pd.read_csv(file)
+
+                df_cp = df.copy(deep=True)
+                df_cp = df_cp.dropna()
+                df_cp[['X', 'Y', 'Z', 'a', 'b', 'c']] = ''
+                df.iloc[df_cp.index] = df_cp
+
+                df.to_csv(file, ',', index=False)
+
+
 def remove_acc_outliers_inner(lower, upper, file):
     df = pd.read_csv(file)
     arr = df[['acc']].to_numpy()
@@ -70,7 +91,7 @@ def remove_acc_outliers(dir, target_region=None):
         for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
             df = pd.read_csv(file)
 
-            df = df.dropna()
+            df = df[['acc']].dropna()
 
             if df.shape[0] == 0:
                 os.remove(file)
@@ -106,6 +127,23 @@ def remove_acc_outliers(dir, target_region=None):
                 pool.map(partial(remove_acc_outliers_inner, lower, upper), file_list)
 
 
+def remove_acc_column(dir, target_region=None):
+    for split in ['train', 'test', 'val']:
+
+        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
+                           desc='remove accuracy column from {} data'.format(split)):
+            region = os.path.basename(subdir)
+
+            if target_region is not None and target_region != region:
+                continue
+
+            file_list = glob.glob(os.path.join(subdir, 'VM2_*.csv'))
+            for file in file_list:
+                df = pd.read_csv(file)
+                df.drop(columns=['acc'], inplace=True)
+                df.to_csv(file, ',', index=False)
+
+
 def calc_vel_delta(dir, target_region=None):
     for split in ['train', 'test', 'val']:
 
@@ -120,14 +158,11 @@ def calc_vel_delta(dir, target_region=None):
                 df = pd.read_csv(file)
 
                 df_cp = df.copy(deep=True)
-
-                df_cp = df_cp.dropna()
-                df_cp[['lat', 'lon', 'timeStamp']] = df_cp[['lat', 'lon', 'timeStamp']].diff()
-                df_cp = df_cp.dropna()
+                df_cp[['lat', 'lon', 'timeStamp']] = df_cp[['lat', 'lon', 'timeStamp']].dropna().diff()
 
                 # compute lat & lon change per second
-                df_cp['lat'] = df_cp['lat'] * 1000 / df_cp['timeStamp']
-                df_cp['lon'] = df_cp['lon'] * 1000 / df_cp['timeStamp']
+                df_cp['lat'] = df_cp['lat'].dropna() * 1000 / df_cp['timeStamp'].dropna()
+                df_cp['lon'] = df_cp['lon'].dropna() * 1000 / df_cp['timeStamp'].dropna()
 
                 df[['lat', 'lon']] = df_cp[['lat', 'lon']]
 
@@ -149,7 +184,10 @@ def linear_interpolate(file):
     # drop all duplicate occurrences of the labels and keep the first occurrence
     df = df[~df.index.duplicated(keep='first')]
 
-    # interpolation of a, b, c via linear interpolation based on timestamp
+    # interpolation of X, Y, Z, a, b, c via linear interpolation based on timestamp
+    df['X'].interpolate(method='time', inplace=True)
+    df['Y'].interpolate(method='time', inplace=True)
+    df['Z'].interpolate(method='time', inplace=True)
     df['a'].interpolate(method='time', inplace=True)
     df['b'].interpolate(method='time', inplace=True)
     df['c'].interpolate(method='time', inplace=True)
@@ -695,14 +733,19 @@ def fourier_transform(dir, target_region=None, in_memory_flag=True, deepsense_fl
 
 def preprocess(dir, target_region=None, bucket_size=100, time_interval=100, interpolation_type='equidistant',
                in_memory_flag=True, deepsense_flag=True, fft_window=5, slices=20, data_augmentation_flag=False, imag_flag=False, gps_flag=False, class_counts_file='class_counts.csv'):
+
     if gps_flag:
         remove_invalid_rides(dir, target_region)
-    remove_acc_outliers(dir, target_region)
-    if gps_flag:
+        remove_sensor_values_from_gps_timestamps(dir, target_region)
+        remove_acc_outliers(dir, target_region)
         calc_vel_delta(dir, target_region)
-    interpolate(dir, target_region, time_interval, interpolation_type)
-    if gps_flag:
+        interpolate(dir, target_region, time_interval, interpolation_type)
         remove_vel_outliers(dir, target_region)
+    else:
+        remove_sensor_values_from_gps_timestamps(dir, target_region)
+        remove_acc_column(dir, target_region)
+        interpolate(dir, target_region, time_interval, interpolation_type)
+
     remove_empty_rows(dir, target_region)
     scale(dir, target_region)
     create_buckets(dir, target_region, bucket_size, in_memory_flag, deepsense_flag, fft_window, slices, data_augmentation_flag, gps_flag, class_counts_file)
