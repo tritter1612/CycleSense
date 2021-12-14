@@ -59,7 +59,7 @@ def create_ds(dir, target_region, split, batch_size=32, in_memory_flag=True, dee
                                                 ))
 
         ds = ds.batch(batch_size, num_parallel_calls=tf.data.AUTOTUNE, deterministic=True)
-        ds = ds.prefetch(1)
+        ds = ds.prefetch(tf.data.AUTOTUNE)
 
         if count:
             class_counts_df = pd.read_csv(class_counts_file)
