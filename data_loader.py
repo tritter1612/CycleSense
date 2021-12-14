@@ -31,8 +31,7 @@ def data_gen(dir, split, target_region):
 
 
 def create_ds(dir, target_region, split, batch_size=32, in_memory_flag=True, deepsense_flag=True, gps_flag=False,
-              count=False,
-              class_counts_file='class_counts.csv'):
+              count=False, class_counts_file='class_counts.csv', filter_fn=None):
     if deepsense_flag:
 
         if in_memory_flag:
@@ -58,6 +57,7 @@ def create_ds(dir, target_region, split, batch_size=32, in_memory_flag=True, dee
                                                     tf.TensorSpec(shape=(), dtype=tf.int32)
                                                 ))
 
+        ds = ds.filter(filter_fn) if filter_fn is not None else ds
         ds = ds.batch(batch_size, num_parallel_calls=tf.data.AUTOTUNE, deterministic=True)
         ds = ds.prefetch(tf.data.AUTOTUNE)
 

@@ -2,6 +2,7 @@ import os
 import glob
 import numpy as np
 import pandas as pd
+import tensorflow as tf
 import datetime as dt
 import multiprocessing as mp
 from tqdm.auto import tqdm
@@ -9,6 +10,9 @@ from sklearn.preprocessing import MaxAbsScaler
 import math
 from functools import partial
 import joblib
+
+from data_loader import create_ds
+from gan import init_gan, train_gan
 
 
 def remove_invalid_rides(dir, target_region=None):
@@ -488,6 +492,12 @@ def create_buckets(dir, target_region=None, bucket_size=100, in_memory_flag=True
 
                     arr = np.genfromtxt(file, delimiter=',', skip_header=True)
 
+                    # remove first and last 15 seconds of a ride
+                    try:
+                        arr = arr[60:-60, :]
+                    except:
+                        print('not enough data points to remove')
+
                     try:
 
                         lat = arr[:, 0]
@@ -647,9 +657,23 @@ def augment_data(dir, target_region=None, in_memory_flag=True, deepsense_flag=Tr
                 np.savez(os.path.join(dir, split, region + '.npz'), ride_images_list)
 
             if gan_flag:
+                init_gan(gan_checkpoint_dir, batch_size, noise_dim)
 
-                # TODO: implement
-                return
+                target_region = 'Berlin' if target_region is None else target_region
+                ds, pos_counter, neg_counter = create_ds(dir, target_region, 'train', batch_size, in_memory_flag, deepsense_flag, gps_flag, True,
+                               class_counts_file, filter_fn=lambda x, y: y[0] == 1)
+
+                generator, discriminator = train_gan(ds, num_epochs)
+
+                num_examples_to_generate = neg_counter - pos_counter
+                generated_buckets = generator(tf.random.normal([num_examples_to_generate, noise_dim]), training=False)
+                generated_buckets = tf.concat([generated_buckets, tf.ones_like(generated_buckets)[:, :, :, :1]], axis=3)
+
+                data = tf.concat([tf.cast(data, tf.float32), generated_buckets])
+                data = tf.random.shuffle(data)
+                pos_counter += num_examples_to_generate
+
+                np.savez(os.path.join(dir, split, region + '.npz'), tf.concat([data, generated_buckets], axis=0))
 
         else:
 
@@ -681,8 +705,23 @@ def augment_data(dir, target_region=None, in_memory_flag=True, deepsense_flag=Tr
 
             if gan_flag:
 
-                # TODO: implement
-                return
+                init_gan(gan_checkpoint_dir, batch_size, noise_dim)
+
+                target_region = 'Berlin' if target_region is None else target_region
+                ds, pos_counter, neg_counter = create_ds(dir, target_region, 'train', batch_size, in_memory_flag,
+                                                         deepsense_flag, gps_flag, True,
+                                                         class_counts_file, filter_fn=lambda x, y: y[0] == 1)
+
+                generator, discriminator = train_gan(ds, num_epochs)
+
+                num_examples_to_generate = neg_counter - pos_counter
+                generated_buckets = generator(tf.random.normal([num_examples_to_generate, noise_dim]),
+                                              training=False)
+                generated_buckets = tf.concat([generated_buckets, tf.ones_like(generated_buckets)[:, :, :, :1]], axis=3)
+
+                generated_dict = {'generated_bucket' + '_no' + str(i).zfill(15) + '_bucket_incident.csv' : generated_bucket for i, generated_bucket in enumerate(generated_buckets)}
+
+                ride_data_dict.update(generated_dict)
 
             np.savez(os.path.join(dir, split, region + '.npz'), **ride_data_dict)
 
