@@ -374,7 +374,7 @@ def remove_vel_outliers(dir, target_region=None):
                     df.to_csv(file, ',', index=False)
 
 
-def remove_empty_rows(dir, target_region=None):
+def remove_empty_rows(dir, target_region=None, gps_flag=True):
     for split in ['train', 'test', 'val']:
 
         for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
@@ -439,40 +439,6 @@ def scale(dir, target_region=None):
                 df.to_csv(file, ',', index=False)
 
 
-def augment_data(ride_image, axis):
-
-    if axis == 0:
-        # 180 degree rotation matrix around X axis
-        R = [[1, 0, 0],
-             [0, -1, 0],
-             [0, 0, -1]]
-
-    elif axis == 1:
-        # 180 degree rotation matrix around Y axis
-        R = [[-1, 0, 0],
-             [0, 1, 0],
-             [0, 0, -1]]
-
-    elif axis == 2:
-        # 180 degree rotation matrix around Z axis
-        R = [[-1, 0, 0],
-             [0, -1, 0],
-             [0, 0, 1]]
-
-    else:
-        return None
-
-    ride_image_acc = ride_image[:, :, :3]
-    ride_image_gyro = ride_image[:, :, 3:6]
-
-    ride_image_acc_rotated = np.matmul(ride_image_acc, R)
-    ride_image_gyro_rotated = np.matmul(ride_image_gyro, R)
-
-    ride_image_rotated = np.concatenate((ride_image_acc_rotated, ride_image_gyro_rotated, ride_image[:, :, 6:]), axis=2)
-
-    return ride_image_rotated
-
-
 def create_buckets_inner(bucket_size, file):
     df = pd.read_csv(file)
 
@@ -497,8 +463,8 @@ def create_buckets_inner(bucket_size, file):
     os.remove(file)
 
 
-def create_buckets(dir, target_region=None, bucket_size=100, in_memory_flag=True, deepsense_flag=False, fft_window=5, slices=20,
-                   data_augmentation_flag=False, gps_flag=False, class_counts_file='class_counts.csv'):
+def create_buckets(dir, target_region=None, bucket_size=100, in_memory_flag=True, deepsense_flag=False, fft_window=5,
+                   slices=20, gps_flag=False, class_counts_file='class_counts.csv'):
     class_counts_df = pd.DataFrame()
 
     for split in ['train', 'test', 'val']:
@@ -573,25 +539,6 @@ def create_buckets(dir, target_region=None, bucket_size=100, in_memory_flag=True
                                         ride_image[:, :, -1] = 1  # TODO: Maybe preserve incident type
                                         pos_counter += 1
 
-                                        if split == 'train' and data_augmentation_flag:
-                                            ride_image_rotated_X = augment_data(ride_image, axis=0)
-                                            ride_image_rotated_Y = augment_data(ride_image, axis=1)
-                                            ride_image_rotated_Z = augment_data(ride_image, axis=2)
-                                            pos_counter += 3
-
-                                            if in_memory_flag:
-                                                ride_images_list.append(ride_image_rotated_X)
-                                                ride_images_list.append(ride_image_rotated_Y)
-                                                ride_images_list.append(ride_image_rotated_Z)
-
-                                            else:
-                                                dict_name_rotated_X = os.path.basename(file).replace('.csv', '') +  '_no' + str(i).zfill(5) + '_rotated_X_bucket_incident'
-                                                ride_images_dict.update({dict_name_rotated_X: ride_image_rotated_X})
-                                                dict_name_rotated_Y = os.path.basename(file).replace('.csv', '') +  '_no' + str(i).zfill(5) + '_rotated_Y_bucket_incident'
-                                                ride_images_dict.update({dict_name_rotated_Y: ride_image_rotated_Y})
-                                                dict_name_rotated_Z = os.path.basename(file).replace('.csv', '') +  '_no' + str(i).zfill(5) + '_rotated_Z_bucket_incident'
-                                                ride_images_dict.update({dict_name_rotated_Z: ride_image_rotated_Z})
-
                                         if in_memory_flag:
                                             ride_images_list.append(ride_image)
 
@@ -610,7 +557,7 @@ def create_buckets(dir, target_region=None, bucket_size=100, in_memory_flag=True
                     except:
                         print(file)
 
-                    class_counts_df[split + '_' + region] = [pos_counter, neg_counter]
+                    class_counts_df['_'.join([split, region])] = [pos_counter, neg_counter]
 
                     os.remove(file)
 
@@ -628,8 +575,123 @@ def create_buckets(dir, target_region=None, bucket_size=100, in_memory_flag=True
                     pool.map(partial(create_buckets_inner, bucket_size), file_list)
 
 
-def fourier_transform_off_memory(dir, split, region, fft_window, slices, gps_flag, imag_flag, file_list):
+def rotate_bucket(ride_image, axis):
+    if axis == 0:
+        # 180 degree rotation matrix around X axis
+        R = [[1, 0, 0],
+             [0, -1, 0],
+             [0, 0, -1]]
 
+    elif axis == 1:
+        # 180 degree rotation matrix around Y axis
+        R = [[-1, 0, 0],
+             [0, 1, 0],
+             [0, 0, -1]]
+
+    elif axis == 2:
+        # 180 degree rotation matrix around Z axis
+        R = [[-1, 0, 0],
+             [0, -1, 0],
+             [0, 0, 1]]
+
+    else:
+        return None
+
+    ride_image_acc = ride_image[:, :, :3]
+    ride_image_gyro = ride_image[:, :, 3:6]
+
+    ride_image_acc_rotated = np.matmul(ride_image_acc, R)
+    ride_image_gyro_rotated = np.matmul(ride_image_gyro, R)
+
+    ride_image_rotated = np.concatenate((ride_image_acc_rotated, ride_image_gyro_rotated, ride_image[:, :, 6:]), axis=2)
+
+    return ride_image_rotated
+
+
+def augment_data(dir, target_region=None, in_memory_flag=True, deepsense_flag=True, gps_flag=True, rotation_flag=False,
+                 gan_flag=False, num_epochs=1000, batch_size=128, noise_dim=100, class_counts_file='class_counts.csv',
+                 gan_checkpoint_dir='./gan_checkpoints'):
+    # global ride_images_list
+    class_counts_df = pd.read_csv(os.path.join(dir, class_counts_file))
+
+    split = 'train'
+
+    for subdir in glob.glob(os.path.join(dir, split, '*.npz')):
+        region = os.path.basename(subdir).replace('.npz', '')
+
+        if target_region is not None and target_region != region:
+            continue
+
+        pos_counter, neg_counter = class_counts_df['_'.join([split, region])]
+
+        if in_memory_flag:
+            data_loaded = np.load(os.path.join(dir, split, region + '.npz'))
+            data = data_loaded['arr_0']
+
+            if rotation_flag:
+
+                ride_images_list = [ride_image for ride_image in data]
+
+                for ride_image in data:
+
+                    if np.any(ride_image[:, :, -1]) > 0:
+                        ride_image_rotated_X = rotate_bucket(ride_image, axis=0)
+                        ride_image_rotated_Y = rotate_bucket(ride_image, axis=1)
+                        ride_image_rotated_Z = rotate_bucket(ride_image, axis=2)
+
+                        ride_images_list.append(ride_image_rotated_X)
+                        ride_images_list.append(ride_image_rotated_Y)
+                        ride_images_list.append(ride_image_rotated_Z)
+                        pos_counter += 3
+
+                np.savez(os.path.join(dir, split, region + '.npz'), ride_images_list)
+
+            if gan_flag:
+
+                # TODO: implement
+                return
+
+        else:
+
+            data_loaded = np.load(os.path.join(dir, split, region + '.npz'))
+
+            ride_data_dict = {}
+
+            for file in data_loaded.files:
+
+                ride_image = data_loaded[file]
+
+                ride_data_dict.update({file: ride_image})
+
+                if rotation_flag:
+
+                    if np.any(ride_image[:, :, -1]) > 0:
+                        dict_name_rotated_X = file.replace('_bucket_incident', '') + '_rotated_X_bucket_incident'
+                        dict_name_rotated_Y = file.replace('_bucket_incident', '') + '_rotated_Y_bucket_incident'
+                        dict_name_rotated_Z = file.replace('_bucket_incident', '') + '_rotated_Z_bucket_incident'
+
+                        ride_image_rotated_X = rotate_bucket(ride_image, axis=0)
+                        ride_image_rotated_Y = rotate_bucket(ride_image, axis=1)
+                        ride_image_rotated_Z = rotate_bucket(ride_image, axis=2)
+
+                        ride_data_dict.update({dict_name_rotated_X: ride_image_rotated_X})
+                        ride_data_dict.update({dict_name_rotated_Y: ride_image_rotated_Y})
+                        ride_data_dict.update({dict_name_rotated_Z: ride_image_rotated_Z})
+                        pos_counter += 3
+
+            if gan_flag:
+
+                # TODO: implement
+                return
+
+            np.savez(os.path.join(dir, split, region + '.npz'), **ride_data_dict)
+
+        class_counts_df['_'.join([split, region])] = [pos_counter, neg_counter]
+
+    class_counts_df.to_csv(os.path.join(dir, class_counts_file), ',', index=False)
+
+
+def fourier_transform_off_memory(dir, split, region, fft_window, slices, gps_flag, imag_flag, file_list):
     ride_data_dict = {}
 
     data_loaded = np.load(os.path.join(dir, split, region + '.npz'))
@@ -670,13 +732,12 @@ def fourier_transform_off_memory(dir, split, region, fft_window, slices, gps_fla
     return ride_data_dict
 
 
-def fourier_transform(dir, target_region=None, in_memory_flag=True, deepsense_flag=False, imag_flag=False, gps_flag=False):
-
+def fourier_transform(dir, target_region=None, in_memory_flag=True, deepsense_flag=False, imag_flag=False, gps_flag=False, fft_window=5, slices=20):
     for split in ['train', 'test', 'val']:
 
         for subdir in tqdm(glob.glob(os.path.join(dir, split, '*.npz')),
                            desc='apply fourier transform to {} data'.format(split)):
-            region = os.path.basename(subdir).replace('.npz','')
+            region = os.path.basename(subdir).replace('.npz', '')
 
             if target_region is not None and target_region != region:
                 continue
@@ -732,24 +793,38 @@ def fourier_transform(dir, target_region=None, in_memory_flag=True, deepsense_fl
 
 
 def preprocess(dir, target_region=None, bucket_size=100, time_interval=100, interpolation_type='equidistant',
-               in_memory_flag=True, deepsense_flag=True, fft_window=5, slices=20, data_augmentation_flag=False, imag_flag=False, gps_flag=False, class_counts_file='class_counts.csv'):
-
+               in_memory_flag=True, deepsense_flag=True, fft_window=5, slices=20, imag_flag=True, gps_flag=True,
+               data_augmentation_flag=False, rotation_flag=False, gan_flag=False, num_epochs=1000, batch_size=128,
+               noise_dim=100, class_counts_file='class_counts.csv', gan_checkpoint_dir='./gan_checkpoints'):
     if gps_flag:
-        remove_invalid_rides(dir, target_region)
-        remove_sensor_values_from_gps_timestamps(dir, target_region)
-        remove_acc_outliers(dir, target_region)
-        calc_vel_delta(dir, target_region)
-        interpolate(dir, target_region, time_interval, interpolation_type)
-        remove_vel_outliers(dir, target_region)
+        remove_invalid_rides(dir=dir, target_region=target_region)
+        remove_sensor_values_from_gps_timestamps(dir=dir, target_region=target_region)
+        remove_acc_outliers(dir=dir, target_region=target_region)
+        calc_vel_delta(dir=dir, target_region=target_region)
+        interpolate(dir=dir, target_region=target_region, time_interval=time_interval,
+                    interpolation_type=interpolation_type)
+        remove_vel_outliers(dir=dir, target_region=target_region)
     else:
-        remove_sensor_values_from_gps_timestamps(dir, target_region)
-        remove_acc_column(dir, target_region)
-        interpolate(dir, target_region, time_interval, interpolation_type)
+        remove_sensor_values_from_gps_timestamps(dir=dir, target_region=target_region)
+        remove_acc_column(dir=dir, target_region=target_region)
+        interpolate(dir=dir, target_region=target_region, time_interval=time_interval,
+                    interpolation_type=interpolation_type)
 
-    remove_empty_rows(dir, target_region)
-    scale(dir, target_region)
-    create_buckets(dir, target_region, bucket_size, in_memory_flag, deepsense_flag, fft_window, slices, data_augmentation_flag, gps_flag, class_counts_file)
-    fourier_transform(dir, target_region, in_memory_flag, deepsense_flag, imag_flag, gps_flag)
+    remove_empty_rows(dir=dir, target_region=target_region, gps_flag=gps_flag)
+    scale(dir=dir, target_region=target_region)
+    create_buckets(dir=dir, target_region=target_region, bucket_size=bucket_size, in_memory_flag=in_memory_flag,
+                   deepsense_flag=deepsense_flag, fft_window=fft_window, slices=slices, gps_flag=gps_flag,
+                   class_counts_file=class_counts_file)
+
+    if data_augmentation_flag and (rotation_flag or gan_flag):
+        augment_data(dir=dir, target_region=target_region, in_memory_flag=in_memory_flag, deepsense_flag=deepsense_flag,
+                     gps_flag=gps_flag, rotation_flag=rotation_flag, gan_flag=gan_flag, num_epochs=num_epochs,
+                     batch_size=batch_size, noise_dim=noise_dim, class_counts_file=class_counts_file,
+                     gan_checkpoint_dir=gan_checkpoint_dir)
+    fourier_transform(dir=dir, target_region=target_region, in_memory_flag=in_memory_flag,
+                      deepsense_flag=deepsense_flag, imag_flag=imag_flag, gps_flag=gps_flag, fft_window=fft_window,
+                      slices=slices)
+
 
 if __name__ == '__main__':
     dir = '../Ride_Data'
@@ -761,8 +836,16 @@ if __name__ == '__main__':
     fft_window = 5
     slices = 20
     in_memory_flag = True
-    data_augmentation_flag = False
     imag_flag = True
     gps_flag = True
-    class_counts_file = 'class_counts.csv'
-    preprocess(dir, target_region, bucket_size, time_interval, interpolation_type, in_memory_flag, deepsense_flag, fft_window, slices, data_augmentation_flag, imag_flag, gps_flag, class_counts_file)
+    data_augmentation_flag = True
+    rotation_flag = False
+    gan_flag = False
+    num_epochs = 1000
+    batch_size = 128
+    noise_dim = 100
+    class_counts_file = os.path.join(dir, 'class_counts.csv')
+    gan_checkpoint_dir = './gan_checkpoints'
+    preprocess(dir, target_region, bucket_size, time_interval, interpolation_type, in_memory_flag, deepsense_flag,
+               fft_window, slices, imag_flag, gps_flag, data_augmentation_flag, rotation_flag, gan_flag, num_epochs,
+               batch_size, noise_dim, class_counts_file, gan_checkpoint_dir)
