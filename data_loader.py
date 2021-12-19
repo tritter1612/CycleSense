@@ -62,7 +62,7 @@ def create_ds(dir, target_region, split, batch_size=32, in_memory_flag=True, dee
         ds = ds.prefetch(tf.data.AUTOTUNE)
 
         if count:
-            class_counts_df = pd.read_csv(class_counts_file)
+            class_counts_df = pd.read_csv(os.path.join(dir, class_counts_file))
             pos_counter, neg_counter = class_counts_df[split + '_' + target_region]
 
     else:

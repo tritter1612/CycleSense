@@ -669,7 +669,7 @@ def augment_data(dir, target_region=None, in_memory_flag=True, deepsense_flag=Tr
                 generated_buckets = generator(tf.random.normal([num_examples_to_generate, noise_dim]), training=False)
                 generated_buckets = tf.concat([generated_buckets, tf.ones_like(generated_buckets)[:, :, :, :1]], axis=3)
 
-                data = tf.concat([tf.cast(data, tf.float32), generated_buckets])
+                data = tf.concat([tf.cast(data, tf.float32), generated_buckets], 0)
                 data = tf.random.shuffle(data)
                 pos_counter += num_examples_to_generate
 
@@ -883,8 +883,8 @@ if __name__ == '__main__':
     num_epochs = 1000
     batch_size = 128
     noise_dim = 100
-    class_counts_file = os.path.join(dir, 'class_counts.csv')
-    gan_checkpoint_dir = './gan_checkpoints'
+    class_counts_file = 'class_counts.csv'
+    gan_checkpoint_dir = 'gan_checkpoints'
     preprocess(dir, target_region, bucket_size, time_interval, interpolation_type, in_memory_flag, deepsense_flag,
                fft_window, slices, imag_flag, gps_flag, data_augmentation_flag, rotation_flag, gan_flag, num_epochs,
                batch_size, noise_dim, class_counts_file, gan_checkpoint_dir)
