@@ -2,19 +2,19 @@ import os
 import tensorflow as tf
 from tqdm.auto import trange
 
-
 generator, generator_optimizer = None, None
 discriminator, discriminator_optimizer = None, None
 noise = None
-gan_checkpoint, gan_checkpoint_prefix = None, None
+gen_checkpoint, disc_checkpoint = None, None
 cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+
 
 class Generator(tf.keras.models.Sequential):
     def __init__(self):
         super().__init__()
 
     def create_model(self):
-        self.add(tf.keras.layers.Dense(5*5*256, use_bias=False, input_shape=(100,)))
+        self.add(tf.keras.layers.Dense(5 * 5 * 256, use_bias=False, input_shape=(100,)))
         self.add(tf.keras.layers.BatchNormalization())
         self.add(tf.keras.layers.LeakyReLU())
 
@@ -30,7 +30,8 @@ class Generator(tf.keras.models.Sequential):
         self.add(tf.keras.layers.BatchNormalization())
         self.add(tf.keras.layers.LeakyReLU())
 
-        self.add(tf.keras.layers.Conv2DTranspose(8, (5, 5), strides=(1, 2), padding='same', use_bias=False, activation='tanh'))
+        self.add(tf.keras.layers.Conv2DTranspose(8, (5, 5), strides=(1, 2), padding='same', use_bias=False,
+                                                 activation='tanh'))
         assert self.output_shape == (None, 5, 20, 8)
 
 
@@ -91,15 +92,14 @@ def init_gan(gan_checkpoint_dir, batch_size, noise_dim):
     discriminator.create_model()
     discriminator_optimizer = tf.keras.optimizers.Adam(1e-4)
 
-    global gan_checkpoint, gan_checkpoint_prefix
-    gan_checkpoint_prefix = os.path.join(gan_checkpoint_dir, "ckpt")
-    gan_checkpoint = tf.train.Checkpoint(generator_optimizer=generator_optimizer,
-                                     discriminator_optimizer=discriminator_optimizer,
-                                     generator=generator,
-                                     discriminator=discriminator)
+    global gen_checkpoint, disc_checkpoint
+    gen_checkpoint = os.path.join(gan_checkpoint_dir, 'generator')
+    disc_checkpoint = os.path.join(gan_checkpoint_dir, 'discriminator')
 
     global noise
     noise = tf.random.normal([batch_size, noise_dim])
+
+    return generator, discriminator
 
 
 def train_gan(dataset, epochs):
@@ -110,6 +110,7 @@ def train_gan(dataset, epochs):
             image_batch = x
             train_step(image_batch)
 
-    gan_checkpoint.save(file_prefix=gan_checkpoint_prefix)
+    generator.save_weights(gen_checkpoint)
+    discriminator.save_weights(disc_checkpoint)
 
     return generator, discriminator

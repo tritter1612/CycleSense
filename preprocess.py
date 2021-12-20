@@ -657,21 +657,29 @@ def augment_data(dir, target_region=None, in_memory_flag=True, deepsense_flag=Tr
                 np.savez(os.path.join(dir, split, region + '.npz'), ride_images_list)
 
             if gan_flag:
-                init_gan(gan_checkpoint_dir, batch_size, noise_dim)
+
+                generator, discriminator = init_gan(gan_checkpoint_dir, batch_size, noise_dim)
 
                 target_region = 'Berlin' if target_region is None else target_region
-                ds, pos_counter, neg_counter = create_ds(dir, target_region, 'train', batch_size, in_memory_flag, deepsense_flag, gps_flag, True,
-                               class_counts_file, filter_fn=lambda x, y: y[0] == 1)
+                ds, pos_counter, neg_counter = create_ds(dir, target_region, 'train', batch_size, in_memory_flag,
+                                                         deepsense_flag, gps_flag, True,
+                                                         class_counts_file, filter_fn=lambda x, y: y[0] == 1)
 
-                generator, discriminator = train_gan(ds, num_epochs)
+                try:
+                    generator.load_weights(os.path.join(gan_checkpoint_dir, 'generator'))
+                    print('weights have been loaded from {}'.format(gan_checkpoint_dir))
+                except:
+                    print('train new gan model')
+                    generator, discriminator = train_gan(ds, num_epochs)
 
-                num_examples_to_generate = neg_counter - pos_counter
+                factor = 0.1
+                num_examples_to_generate = int((neg_counter - pos_counter) * factor)
                 generated_buckets = generator(tf.random.normal([num_examples_to_generate, noise_dim]), training=False)
                 generated_buckets = tf.concat([generated_buckets, tf.ones_like(generated_buckets)[:, :, :, :1]], axis=3)
 
                 data = tf.concat([tf.cast(data, tf.float32), generated_buckets], axis=0)
                 data = tf.random.shuffle(data)
-                pos_counter += num_examples_to_generate
+                pos_counter += int(num_examples_to_generate * factor)
 
                 np.savez(os.path.join(dir, split, region + '.npz'), data)
 
@@ -705,14 +713,19 @@ def augment_data(dir, target_region=None, in_memory_flag=True, deepsense_flag=Tr
 
             if gan_flag:
 
-                init_gan(gan_checkpoint_dir, batch_size, noise_dim)
+                generator, discriminator = init_gan(gan_checkpoint_dir, batch_size, noise_dim)
 
                 target_region = 'Berlin' if target_region is None else target_region
                 ds, pos_counter, neg_counter = create_ds(dir, target_region, 'train', batch_size, in_memory_flag,
                                                          deepsense_flag, gps_flag, True,
                                                          class_counts_file, filter_fn=lambda x, y: y[0] == 1)
 
-                generator, discriminator = train_gan(ds, num_epochs)
+                try:
+                    generator.load_weights(os.path.join(gan_checkpoint_dir, 'generator'))
+                    print('weights have been loaded from {}'.format(gan_checkpoint_dir))
+                except:
+                    print('train new gan model')
+                    generator, discriminator = train_gan(ds, num_epochs)
 
                 num_examples_to_generate = neg_counter - pos_counter
                 generated_buckets = generator(tf.random.normal([num_examples_to_generate, noise_dim]),
