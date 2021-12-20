@@ -620,7 +620,7 @@ def rotate_bucket(ride_image, axis):
 
 def augment_data(dir, target_region=None, in_memory_flag=True, deepsense_flag=True, gps_flag=True, rotation_flag=False,
                  gan_flag=False, num_epochs=1000, batch_size=128, noise_dim=100, class_counts_file='class_counts.csv',
-                 gan_checkpoint_dir='./gan_checkpoints'):
+                 gan_checkpoint_dir='gan_checkpoints'):
     # global ride_images_list
     class_counts_df = pd.read_csv(os.path.join(dir, class_counts_file))
 
@@ -669,11 +669,11 @@ def augment_data(dir, target_region=None, in_memory_flag=True, deepsense_flag=Tr
                 generated_buckets = generator(tf.random.normal([num_examples_to_generate, noise_dim]), training=False)
                 generated_buckets = tf.concat([generated_buckets, tf.ones_like(generated_buckets)[:, :, :, :1]], axis=3)
 
-                data = tf.concat([tf.cast(data, tf.float32), generated_buckets], 0)
+                data = tf.concat([tf.cast(data, tf.float32), generated_buckets], axis=0)
                 data = tf.random.shuffle(data)
                 pos_counter += num_examples_to_generate
 
-                np.savez(os.path.join(dir, split, region + '.npz'), tf.concat([data, generated_buckets], axis=0))
+                np.savez(os.path.join(dir, split, region + '.npz'), data)
 
         else:
 
