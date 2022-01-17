@@ -8,6 +8,11 @@ import warnings
 input_shape_global = None
 
 
+def set_input_shape_global(input_shape):
+    global input_shape_global
+    input_shape_global = input_shape
+
+
 def pack_features_vector(features, labels):
     """Pack the features into a single array."""
 
@@ -80,6 +85,7 @@ def create_ds(dir, target_region, split, batch_size=32, in_memory_flag=True, dee
             batch_size=batch_size,
             shuffle=False,
             num_epochs=1,
+            prefetch_buffer_size=tf.data.AUTOTUNE,
             select_columns=['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c', 'incident'])
 
         ds = data.map(pack_features_vector)
@@ -93,8 +99,7 @@ def create_ds(dir, target_region, split, batch_size=32, in_memory_flag=True, dee
 
 def load_data(dir, target_region, input_shape=(None, 5, 20, 3, 2), batch_size=32, in_memory_flag=True,
               deepsense_flag=True, gps_flag=False, class_counts_file='class_counts.csv'):
-    global input_shape_global
-    input_shape_global = input_shape
+    set_input_shape_global(input_shape)
 
     train_ds, pos_train_counter, neg_train_counter = create_ds(dir, target_region, 'train', batch_size, in_memory_flag,
                                                                deepsense_flag, gps_flag, True, class_counts_file)
