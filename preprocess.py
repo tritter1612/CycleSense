@@ -7,59 +7,74 @@ import datetime as dt
 import multiprocessing as mp
 from tqdm.auto import tqdm
 from sklearn.preprocessing import MaxAbsScaler
-import math
 from functools import partial
 import joblib
 
-from data_loader import create_ds
+from data_loader import create_ds, pack_features_vector, set_input_shape_global
 from gan import init_gan, train_gan
 
 
-def remove_invalid_rides(dir, target_region=None):
+def sort_timestamps_inner(file):
+    df = pd.read_csv(file)
+    df.sort_values(['timeStamp'], axis=0, ascending=True, inplace=True, kind='merge')
+    df.to_csv(os.path.join(file), ',', index=False)
+
+
+def sort_timestamps(dir, region='Berlin', pbar=None):
     for split in ['train', 'test', 'val']:
+        file_list = glob.glob(os.path.join(dir, split, region, 'VM2_*.csv'))
+        with mp.Pool(mp.cpu_count()) as pool:
+            pool.map(sort_timestamps_inner, file_list)
 
-        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
-                           desc='remove invalid rides in {} data'.format(split)):
-            region = os.path.basename(subdir)
-
-            if target_region is not None and target_region != region:
-                continue
-
-            for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
-
-                df = pd.read_csv(file)
-
-                df_cp = df.copy(deep=True)
-                df_cp['timeStamp'] = df_cp['timeStamp'].diff()
-
-                breakpoints = np.where((df_cp['timeStamp'] > 6000).to_numpy())
-
-                df_cp.dropna(inplace=True, axis=0)
-
-                if len(df_cp) == 0 or len(breakpoints[0]) > 0:
-                    # remove rides where one col is completely empty or gps timestamp interval is too long
-                    os.remove(file)
+    pbar.update(1) if pbar is not None else print()
 
 
-def remove_sensor_values_from_gps_timestamps(dir, target_region=None):
+def remove_invalid_rides_inner(file):
+    df = pd.read_csv(file)
+
+    df_cp = df.copy(deep=True)
+    df_cp['timeStamp'] = df_cp['timeStamp'].diff()
+
+    breakpoints = np.where((df_cp['timeStamp'] > 6000).to_numpy())
+
+    df_cp.dropna(inplace=True, axis=0)
+
+    if len(df_cp) == 0 or len(breakpoints[0]) > 0:
+        # remove rides where one col is completely empty or gps timestamp interval is too long
+        os.remove(file)
+
+
+def remove_invalid_rides(dir, region='Berlin', pbar=None):
     for split in ['train', 'test', 'val']:
+        file_list = glob.glob(os.path.join(dir, split, region, 'VM2_*.csv'))
 
-        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
-                           desc='remove sensor values from gps timestamp rides in {} data'.format(split)):
-            region = os.path.basename(subdir)
+        with mp.Pool(mp.cpu_count()) as pool:
+            pool.map(remove_invalid_rides_inner, file_list)
 
-            if target_region is not None and target_region != region:
-                continue
+    pbar.update(1) if pbar is not None else print()
 
-            for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
-                df = pd.read_csv(file)
 
-                df_cp = df.copy(deep=True)
-                df_cp = df_cp.dropna()
-                df_cp[['X', 'Y', 'Z', 'a', 'b', 'c']] = ''
-                df.iloc[df_cp.index] = df_cp
+def remove_sensor_values_from_gps_timestamps_inner(file):
+    # for android data remove accelerometer and gyroscope sensor data from gps measurements as timestamps is rounded to seconds and order is not restorable
 
-                df.to_csv(file, ',', index=False)
+    if os.path.splitext(file)[0][-1] == 'a':
+        df = pd.read_csv(file)
+        df_cp = df.copy(deep=True)
+        df_cp = df_cp[['lat', 'lon', 'acc']].dropna()
+        df_cp = df.iloc[df_cp.index.values].copy(True)
+        df_cp[['X', 'Y', 'Z', 'a', 'b', 'c']] = ''
+        df.iloc[df_cp.index] = df_cp
+        df.to_csv(file, ',', index=False)
+
+
+def remove_sensor_values_from_gps_timestamps(dir, region='Berlin', pbar=None):
+    for split in ['train', 'test', 'val']:
+        file_list = glob.glob(os.path.join(dir, split, region, 'VM2_*.csv'))
+
+        with mp.Pool(mp.cpu_count()) as pool:
+            pool.map(remove_sensor_values_from_gps_timestamps_inner, file_list)
+
+    pbar.update(1) if pbar is not None else print()
 
 
 def remove_acc_outliers_inner(lower, upper, file):
@@ -81,31 +96,22 @@ def remove_acc_outliers_inner(lower, upper, file):
     df.to_csv(file, ',', index=False)
 
 
-def remove_acc_outliers(dir, target_region=None):
+def remove_acc_outliers(dir, region='Berlin', pbar=None):
     l = []
     split = 'train'
 
-    for subdir in glob.glob(os.path.join(dir, split, '[!.]*')):
+    for file in glob.glob(os.path.join(dir, split, region, 'VM2_*.csv')):
+        df = pd.read_csv(file)
 
-        region = os.path.basename(subdir)
+        df = df[['acc']].dropna()
 
-        if target_region is not None and target_region != region:
-            continue
+        if df.shape[0] == 0:
+            os.remove(file)
 
-        for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
-            df = pd.read_csv(file)
-
-            df = df[['acc']].dropna()
-
-            if df.shape[0] == 0:
-                os.remove(file)
-
-            else:
-                l.append(df[['acc']].to_numpy())
+        else:
+            l.append(df[['acc']].to_numpy())
 
     arr = np.concatenate(l, axis=0)
-    print('data max: {}'.format(np.max(arr, axis=0)))
-    print('data min: {}'.format(np.min(arr, axis=0)))
 
     arr = arr[:, 0]
     q25 = np.percentile(arr, 25, axis=0)
@@ -117,60 +123,51 @@ def remove_acc_outliers(dir, target_region=None):
     upper = q75 + cut_off
 
     for split in ['train', 'test', 'val']:
+        file_list = glob.glob(os.path.join(dir, split, region, 'VM2_*.csv'))
 
-        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
-                           desc='remove accuracy outliers from {} data'.format(split)):
-            region = os.path.basename(subdir)
+        with mp.Pool(mp.cpu_count()) as pool:
+            pool.map(partial(remove_acc_outliers_inner, lower, upper), file_list)
 
-            if target_region is not None and target_region != region:
-                continue
-
-            file_list = glob.glob(os.path.join(subdir, 'VM2_*.csv'))
-
-            with mp.Pool(mp.cpu_count()) as pool:
-                pool.map(partial(remove_acc_outliers_inner, lower, upper), file_list)
+    pbar.update(1) if pbar is not None else print()
 
 
-def remove_acc_column(dir, target_region=None):
+def remove_acc_column_inner(file):
+    df = pd.read_csv(file)
+    df.drop(columns=['acc'], inplace=True)
+    df.to_csv(file, ',', index=False)
+
+
+def remove_acc_column(dir, region='Berlin', pbar=None):
     for split in ['train', 'test', 'val']:
+        file_list = glob.glob(os.path.join(dir, split, region, 'VM2_*.csv'))
+        with mp.Pool(mp.cpu_count()) as pool:
+            pool.map(remove_acc_column_inner, file_list)
 
-        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
-                           desc='remove accuracy column from {} data'.format(split)):
-            region = os.path.basename(subdir)
-
-            if target_region is not None and target_region != region:
-                continue
-
-            file_list = glob.glob(os.path.join(subdir, 'VM2_*.csv'))
-            for file in file_list:
-                df = pd.read_csv(file)
-                df.drop(columns=['acc'], inplace=True)
-                df.to_csv(file, ',', index=False)
+    pbar.update(1) if pbar is not None else print()
 
 
-def calc_vel_delta(dir, target_region=None):
+def calc_vel_delta_inner(file):
+    df = pd.read_csv(file)
+
+    df_cp = df.copy(deep=True)
+    df_cp[['lat', 'lon', 'timeStamp']] = df_cp[['lat', 'lon', 'timeStamp']].dropna().diff()
+
+    # compute lat & lon change per second
+    df_cp['lat'] = df_cp['lat'].dropna() * 1000 / df_cp['timeStamp'].dropna()
+    df_cp['lon'] = df_cp['lon'].dropna() * 1000 / df_cp['timeStamp'].dropna()
+
+    df[['lat', 'lon']] = df_cp[['lat', 'lon']]
+
+    df.to_csv(file, ',', index=False)
+
+
+def calc_vel_delta(dir, region='Berlin', pbar=None):
     for split in ['train', 'test', 'val']:
+        file_list = glob.glob(os.path.join(dir, split, region, 'VM2_*.csv'))
+        with mp.Pool(mp.cpu_count()) as pool:
+            pool.map(calc_vel_delta_inner, file_list)
 
-        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
-                           desc='calculate vel delta on {} data'.format(split)):
-            region = os.path.basename(subdir)
-
-            if target_region is not None and target_region != region:
-                continue
-
-            for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
-                df = pd.read_csv(file)
-
-                df_cp = df.copy(deep=True)
-                df_cp[['lat', 'lon', 'timeStamp']] = df_cp[['lat', 'lon', 'timeStamp']].dropna().diff()
-
-                # compute lat & lon change per second
-                df_cp['lat'] = df_cp['lat'].dropna() * 1000 / df_cp['timeStamp'].dropna()
-                df_cp['lon'] = df_cp['lon'].dropna() * 1000 / df_cp['timeStamp'].dropna()
-
-                df[['lat', 'lon']] = df_cp[['lat', 'lon']]
-
-                df.to_csv(file, ',', index=False)
+    pbar.update(1) if pbar is not None else print()
 
 
 def linear_interpolate(file):
@@ -196,9 +193,8 @@ def linear_interpolate(file):
     df['b'].interpolate(method='time', inplace=True)
     df['c'].interpolate(method='time', inplace=True)
 
-    df.sort_index(axis=0, ascending=False, inplace=True)
-
     # interpolation of missing values via padding on the reversed df
+    df.sort_index(axis=0, ascending=False, inplace=True)
     df['lat'].interpolate(method='pad', inplace=True)
     df['lon'].interpolate(method='pad', inplace=True)
 
@@ -290,57 +286,62 @@ def equidistant_interpolate(time_interval, file):
     df.to_csv(file, ',', index=False)
 
 
-def interpolate(dir, target_region=None, time_interval=100, interpolation_type='linear'):
+def interpolate(dir, region='Berlin', time_interval=100, interpolation_type='equidistant', pbar=None):
     for split in ['train', 'test', 'val']:
 
-        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
-                           desc='interpolate {} data'.format(split)):
-            region = os.path.basename(subdir)
+        file_list = glob.glob(os.path.join(dir, split, region, 'VM2_*.csv'))
 
-            if target_region is not None and target_region != region:
-                continue
+        with mp.Pool(mp.cpu_count()) as pool:
 
-            file_list = glob.glob(os.path.join(subdir, 'VM2_*.csv'))
+            if interpolation_type == 'linear':
+                pool.map(linear_interpolate, file_list)
 
-            with mp.Pool(mp.cpu_count()) as pool:
-
-                if interpolation_type == 'linear':
-                    pool.map(linear_interpolate, file_list)
-
-                elif interpolation_type == 'equidistant':
-                    pool.map(partial(equidistant_interpolate, time_interval), file_list)
-
-                else:
-                    print('interpolation_type is incorrect')
-                    return
-
-
-def remove_vel_outliers(dir, target_region=None):
-    l = []
-    split = 'train'
-
-    for subdir in glob.glob(os.path.join(dir, split, '[!.]*')):
-        region = os.path.basename(subdir)
-
-        if target_region is not None and target_region != region:
-            continue
-
-        for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
-
-            df = pd.read_csv(file)
-
-            df = df.dropna()
-
-            if df.shape[0] == 0:
-                os.remove(file)
+            elif interpolation_type == 'equidistant':
+                pool.map(partial(equidistant_interpolate, time_interval), file_list)
 
             else:
-                l.append(df[['lat', 'lon']].to_numpy())
+                print('interpolation_type is incorrect')
+                return
+
+    pbar.update(1) if pbar is not None else print()
+
+
+def remove_vel_outliers_inner(lower, upper, file):
+    df = pd.read_csv(file)
+
+    arr = df[['lat', 'lon']].to_numpy()
+
+    outliers_lower = arr < lower
+    outliers_upper = arr > upper
+
+    outliers = np.logical_or(outliers_lower, outliers_upper)
+    outliers_bool = np.any(outliers, axis=1)
+    outlier_rows = np.where(outliers_bool)[0]
+
+    if len(outlier_rows) > 0:
+        df = df.drop(outlier_rows)
+        df.to_csv(file, ',', index=False)
+
+
+def remove_vel_outliers(dir, region='Berlin', pbar=None):
+    l = []
+
+    for file in glob.glob(os.path.join(dir, 'train', region, 'VM2_*.csv')):
+
+        df = pd.read_csv(file)
+
+        df = df.dropna()
+
+        if df.shape[0] == 0:
+            os.remove(file)
+
+        else:
+            l.append(df[['lat', 'lon']].to_numpy())
 
     arr = np.concatenate(l, axis=0)
 
-    print('data max: {}'.format(np.max(arr, axis=0)))
-    print('data min: {}'.format(np.min(arr, axis=0)))
+    # print('data max: {}'.format(np.max(arr, axis=0)))
+    # print('data min: {}'.format(np.min(arr, axis=0)))
 
     # arr = arr[:, :]
     q25 = np.percentile(arr, 25, axis=0)
@@ -352,57 +353,42 @@ def remove_vel_outliers(dir, target_region=None):
     upper = q75 + cut_off
 
     for split in ['train', 'test', 'val']:
+        file_list = glob.glob(os.path.join(dir, split, region, 'VM2_*.csv'))
+        with mp.Pool(mp.cpu_count()) as pool:
+            pool.map(partial(remove_vel_outliers_inner, lower, upper), file_list)
 
-        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
-                           desc='remove velocity outliers from {} data'.format(split)):
-            region = os.path.basename(subdir)
-
-            if target_region is not None and target_region != region:
-                continue
-
-            for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
-
-                df = pd.read_csv(file)
-
-                arr = df[['lat', 'lon']].to_numpy()
-
-                outliers_lower = arr < lower
-                outliers_upper = arr > upper
-
-                outliers = np.logical_or(outliers_lower, outliers_upper)
-                outliers_bool = np.any(outliers, axis=1)
-                outlier_rows = np.where(outliers_bool)[0]
-
-                if len(outlier_rows) > 0:
-                    df = df.drop(outlier_rows)
-                    df.to_csv(file, ',', index=False)
+    pbar.update(1) if pbar is not None else print()
 
 
-def remove_empty_rows(dir, target_region=None, gps_flag=True):
+def remove_empty_rows_inner(file):
+    df = pd.read_csv(file)
+    df.dropna(inplace=True, axis=0)
+
+    if len(df) != 0:
+        df.to_csv(file, ',', index=False)
+    else:
+        os.remove(file)
+
+
+def remove_empty_rows(dir, region='Berlin', pbar=None):
     for split in ['train', 'test', 'val']:
+        file_list = glob.glob(os.path.join(dir, split, region, 'VM2_*.csv'))
+        with mp.Pool(mp.cpu_count()) as pool:
+            pool.map(remove_empty_rows_inner, file_list)
 
-        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
-                           desc='remove empty rows in {} data'.format(split)):
-            region = os.path.basename(subdir)
-
-            if target_region is not None and target_region != region:
-                continue
-
-            for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
-
-                df = pd.read_csv(file)
-                if not gps_flag:
-                    df['lat'] = 0.0
-                    df['lon'] = 0.0
-                df.dropna(inplace=True, axis=0)
-
-                if len(df) != 0:
-                    df.to_csv(file, ',', index=False)
-                else:
-                    os.remove(file)
+    pbar.update(1) if pbar is not None else print()
 
 
-def scale(dir, target_region=None):
+def scale_inner(scaler_maxabs, file):
+    df = pd.read_csv(file)
+    df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c']] = scaler_maxabs.transform(
+        df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c']])
+
+    # change order of features
+    df[['X', 'Y', 'Z', 'a', 'b', 'c', 'lat', 'lon', 'incident']].to_csv(file, ',', index=False)
+
+
+def scale(dir, region='Berlin', pbar=None):
     scaler_maxabs = MaxAbsScaler()
 
     split = 'train'
@@ -412,177 +398,88 @@ def scale(dir, target_region=None):
     if os.path.isfile(scaler_file):
         scaler_maxabs = joblib.load(scaler_file)
     else:
-        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')), desc='fit scaler'):
-            region = os.path.basename(subdir)
 
-            if target_region is not None and target_region != region:
-                continue
+        for file in glob.glob(os.path.join(dir, split, region, 'VM2_*.csv')):
+            df = pd.read_csv(file)
 
-            for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
-                df = pd.read_csv(file)
+            df.fillna(0, inplace=True)
 
-                df.fillna(0, inplace=True)
-
-                scaler_maxabs.partial_fit(df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c']])
+            scaler_maxabs.partial_fit(df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c']])
 
         joblib.dump(scaler_maxabs, os.path.join(dir, 'scaler.save'))
 
     for split in ['train', 'test', 'val']:
+        file_list = glob.glob(os.path.join(dir, split, region, 'VM2_*.csv'))
 
-        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')), desc='scale {} data'.format(split)):
-            region = os.path.basename(subdir)
+        with mp.Pool(mp.cpu_count()) as pool:
+            pool.map(partial(scale_inner, scaler_maxabs), file_list)
 
-            if target_region is not None and target_region != region:
-                continue
-
-            for file in glob.glob(os.path.join(subdir, 'VM2_*.csv')):
-                df = pd.read_csv(file)
-                df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c']] = scaler_maxabs.transform(
-                    df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c']])
-
-                df.to_csv(file, ',', index=False)
+    pbar.update(1) if pbar is not None else print()
 
 
-def create_buckets_inner(bucket_size, file):
-    df = pd.read_csv(file)
-
-    length = df.shape[0]
-    num_splits = math.floor(length / bucket_size)
-    length_new = num_splits * bucket_size
-
-    if num_splits >= 1:
-
-        df_splits = np.array_split(df.iloc[:length_new, :], num_splits)
-
-        for k, df_split in enumerate(df_splits):
-
-            if (np.any((df_split['incident'] >= 1.0).to_numpy())):
-                df_split['incident'] = 1.0
-                df_split.to_csv(file.replace('.csv', '') + '_no' + str(k).zfill(5) + '_bucket_incident.csv', ',',
-                                index=False)
-            else:
-                df_split['incident'] = 0.0
-                df_split.to_csv(file.replace('.csv', '') + '_no' + str(k).zfill(5) + '_bucket.csv', ',', index=False)
-
-    os.remove(file)
-
-
-def create_buckets(dir, target_region=None, bucket_size=100, in_memory_flag=True, deepsense_flag=False, fft_window=5,
-                   slices=20, gps_flag=False, class_counts_file='class_counts.csv'):
+def create_buckets(dir, region='Berlin', in_memory_flag=True, window_size=5, slices=20, class_counts_file='class_counts.csv', pbar=None):
     class_counts_df = pd.DataFrame()
 
     for split in ['train', 'test', 'val']:
 
-        for subdir in tqdm(glob.glob(os.path.join(dir, split, '[!.]*')),
-                           desc='generate buckets for {} data'.format(split)):
-            region = os.path.basename(subdir)
+        file_list = glob.glob(os.path.join(dir, split, region, 'VM2_*.csv'))
 
-            if target_region is not None and target_region != region:
-                continue
+        buckets_dict, buckets_list = {}, []
 
-            file_list = glob.glob(os.path.join(subdir, 'VM2_*.csv'))
+        pos_counter, neg_counter = 0, 0
 
-            ride_images_dict, ride_images_list = {}, []
+        for file in file_list:
 
-            pos_counter, neg_counter = 0, 0
+            arr = np.genfromtxt(file, delimiter=',', skip_header=True)
 
-            if deepsense_flag:
+            # remove first and last 15 seconds of a ride
+            try:
+                arr = arr[60:-60, :]
+            except:
+                print('not enough data points to remove')
 
-                for file in file_list:
+            try:
 
-                    arr = np.genfromtxt(file, delimiter=',', skip_header=True)
+                range = (arr.shape[0] // (window_size * slices)) * window_size * slices
 
-                    # remove first and last 15 seconds of a ride
-                    try:
-                        arr = arr[60:-60, :]
-                    except:
-                        print('not enough data points to remove')
+                arr = np.reshape(arr[:range, :], (int(range / (window_size * slices)), slices, window_size, arr.shape[1]))
+                arr = np.transpose(arr, axes=(0, 2, 1, 3))
 
-                    try:
+                labels = np.reshape(arr[:, :, :, 8], (arr.shape[0], slices * window_size))
+                labels = np.any(labels, axis=1)
 
-                        lat = arr[:, 0]
-                        lat = lat[:, np.newaxis]
-                        lon = arr[:, 1]
-                        lon = lon[:, np.newaxis]
-                        incident = arr[:, -1]
-                        incident = incident[:, np.newaxis]
-
-                        # remove lat, lon
-                        arr = arr[:, 2:]
-
-                        # remove incident
-                        arr = arr[:, :-1]
-
-                        # remove timestamp
-                        arr = np.concatenate((arr[:, :3], arr[:, 4:]), axis=1)
-
-                        n_window_splits = arr.shape[0] // fft_window
-                        window_split_range = n_window_splits * fft_window
-
-                        if n_window_splits > 0:
-
-                            ride_images = np.stack(np.vsplit(arr[:window_split_range], n_window_splits), axis=1)
-                            lat = np.stack(np.vsplit(lat[:window_split_range], n_window_splits), axis=1)
-                            lon = np.stack(np.vsplit(lon[:window_split_range], n_window_splits), axis=1)
-                            incident = np.stack(np.vsplit(incident[:window_split_range], n_window_splits), axis=1)
-
-                            n_image_splits = n_window_splits // slices
-                            image_split_range = n_image_splits * slices
-
-                            if n_image_splits > 0:
-                                ride_image_list = np.array_split(ride_images[:, :image_split_range, :], n_image_splits, axis=1)
-                                lat_list = np.array_split(lat[:, :image_split_range, :], n_image_splits, axis=1)
-                                lon_list = np.array_split(lon[:, :image_split_range, :], n_image_splits, axis=1)
-                                incident_list = np.array_split(incident[:, :image_split_range, :], n_image_splits, axis=1)
-
-                                for i, ride_image in enumerate(ride_image_list):
-
-                                    if gps_flag:
-                                        # append lat, lon & incident
-                                        ride_image = np.dstack((ride_image, lat_list[i], lon_list[i], incident_list[i]))
-
-                                    else:
-                                        # append incident
-                                        ride_image = np.dstack((ride_image, incident_list[i]))
-
-                                    if np.any(ride_image[:, :, -1]) > 0:
-                                        ride_image[:, :, -1] = 1  # TODO: Maybe preserve incident type
-                                        pos_counter += 1
-
-                                        if in_memory_flag:
-                                            ride_images_list.append(ride_image)
-
-                                        else:
-                                            dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(5) + '_bucket_incident'
-                                            ride_images_dict.update({dict_name: ride_image})
-
-                                    else:
-                                        ride_image[:, :, -1] = 0
-                                        neg_counter += 1
-                                        if in_memory_flag:
-                                            ride_images_list.append(ride_image)
-                                        else:
-                                            dict_name = os.path.basename(file).replace('.csv', '') + '_no' + str(i).zfill(5) + '_bucket'
-                                            ride_images_dict.update({dict_name: ride_image})
-                    except:
-                        print(file)
-
-                    class_counts_df['_'.join([split, region])] = [pos_counter, neg_counter]
-
-                    os.remove(file)
-
-                class_counts_df.to_csv(os.path.join(dir, class_counts_file), ',', index=False)
-
-                os.rmdir(subdir)
+                pos_counter += np.sum(labels)
+                neg_counter += len(labels) - np.sum(labels)
 
                 if in_memory_flag:
-                    np.savez(os.path.join(dir, split, region + '.npz'), ride_images_list)
-                else:
-                    np.savez(os.path.join(dir, split, region + '.npz'), **ride_images_dict)
+                    for i, bucket in enumerate(arr):
+                        bucket[:, :, 8] = labels[i]
+                        buckets_list.append(bucket)
 
-            else:
-                with mp.Pool(mp.cpu_count()) as pool:
-                    pool.map(partial(create_buckets_inner, bucket_size), file_list)
+                else:
+                    for i, bucket in enumerate(arr):
+                        bucket[:, :, 8] = labels[i]
+                        dict_name = os.path.basename(file).replace('.csv', '') + \
+                                    '_no' + str(i).zfill(5) + '_bucket_incident'
+                        buckets_dict.update({dict_name: bucket})
+
+            except:
+                print(file)
+
+            os.remove(file)
+
+        class_counts_df['_'.join([split, region])] = [pos_counter, neg_counter]
+
+        class_counts_df.to_csv(os.path.join(dir, class_counts_file), ',', index=False)
+
+        os.rmdir(os.path.join(dir, split, region))
+
+        if in_memory_flag:
+            np.savez(os.path.join(dir, split, region + '.npz'), buckets_list)
+        else:
+            np.savez(os.path.join(dir, split, region + '.npz'), **buckets_dict)
+
+    pbar.update(1) if pbar is not None else print()
 
 
 def rotate_bucket(ride_image, axis):
@@ -618,24 +515,17 @@ def rotate_bucket(ride_image, axis):
     return ride_image_rotated
 
 
-def augment_data(dir, target_region=None, in_memory_flag=True, deepsense_flag=True, gps_flag=True, rotation_flag=False,
-                 gan_flag=False, num_epochs=1000, batch_size=128, noise_dim=100, class_counts_file='class_counts.csv',
-                 gan_checkpoint_dir='gan_checkpoints'):
-    # global ride_images_list
-    class_counts_df = pd.read_csv(os.path.join(dir, class_counts_file))
+def augment_data(dir, region='Berlin', in_memory_flag=True, rotation_flag=False, gan_flag=False, num_epochs=1000,
+                 batch_size=128, noise_dim=100, class_counts_file='class_counts.csv', gan_checkpoint_dir='gan_checkpoints', pbar=None):
 
-    split = 'train'
+    if rotation_flag or gan_flag:
 
-    for subdir in glob.glob(os.path.join(dir, split, '*.npz')):
-        region = os.path.basename(subdir).replace('.npz', '')
+        class_counts_df = pd.read_csv(os.path.join(dir, class_counts_file))
 
-        if target_region is not None and target_region != region:
-            continue
-
-        pos_counter, neg_counter = class_counts_df['_'.join([split, region])]
+        pos_counter, neg_counter = class_counts_df['_'.join(['train', region])]
 
         if in_memory_flag:
-            data_loaded = np.load(os.path.join(dir, split, region + '.npz'))
+            data_loaded = np.load(os.path.join(dir, 'train', region + '.npz'))
             data = data_loaded['arr_0']
 
             if rotation_flag:
@@ -654,15 +544,13 @@ def augment_data(dir, target_region=None, in_memory_flag=True, deepsense_flag=Tr
                         ride_images_list.append(ride_image_rotated_Z)
                         pos_counter += 3
 
-                np.savez(os.path.join(dir, split, region + '.npz'), ride_images_list)
+                np.savez(os.path.join(dir, 'train', region + '.npz'), ride_images_list)
 
             if gan_flag:
 
                 generator, discriminator = init_gan(gan_checkpoint_dir, batch_size, noise_dim)
 
-                target_region = 'Berlin' if target_region is None else target_region
-                ds, pos_counter, neg_counter = create_ds(dir, target_region, 'train', batch_size, in_memory_flag,
-                                                         deepsense_flag, gps_flag, True,
+                ds, pos_counter, neg_counter = create_ds(dir, region, 'train', batch_size, in_memory_flag, True,
                                                          class_counts_file, filter_fn=lambda x, y: y[0] == 1)
 
                 try:
@@ -679,13 +567,13 @@ def augment_data(dir, target_region=None, in_memory_flag=True, deepsense_flag=Tr
 
                 data = tf.concat([tf.cast(data, tf.float32), generated_buckets], axis=0)
                 data = tf.random.shuffle(data)
-                pos_counter += int(num_examples_to_generate * factor)
+                pos_counter += num_examples_to_generate
 
-                np.savez(os.path.join(dir, split, region + '.npz'), data)
+                np.savez(os.path.join(dir, 'train', region + '.npz'), data)
 
         else:
 
-            data_loaded = np.load(os.path.join(dir, split, region + '.npz'))
+            data_loaded = np.load(os.path.join(dir, 'train', region + '.npz'))
 
             ride_data_dict = {}
 
@@ -715,9 +603,7 @@ def augment_data(dir, target_region=None, in_memory_flag=True, deepsense_flag=Tr
 
                 generator, discriminator = init_gan(gan_checkpoint_dir, batch_size, noise_dim)
 
-                target_region = 'Berlin' if target_region is None else target_region
-                ds, pos_counter, neg_counter = create_ds(dir, target_region, 'train', batch_size, in_memory_flag,
-                                                         deepsense_flag, gps_flag, True,
+                ds, pos_counter, neg_counter = create_ds(dir, region, 'train', batch_size, in_memory_flag, True,
                                                          class_counts_file, filter_fn=lambda x, y: y[0] == 1)
 
                 try:
@@ -727,23 +613,29 @@ def augment_data(dir, target_region=None, in_memory_flag=True, deepsense_flag=Tr
                     print('train new gan model')
                     generator, discriminator = train_gan(ds, num_epochs)
 
-                num_examples_to_generate = neg_counter - pos_counter
+                factor = 0.1
+                num_examples_to_generate = int((neg_counter - pos_counter) * factor)
                 generated_buckets = generator(tf.random.normal([num_examples_to_generate, noise_dim]),
                                               training=False)
                 generated_buckets = tf.concat([generated_buckets, tf.ones_like(generated_buckets)[:, :, :, :1]], axis=3)
 
-                generated_dict = {'generated_bucket' + '_no' + str(i).zfill(15) + '_bucket_incident.csv' : generated_bucket for i, generated_bucket in enumerate(generated_buckets)}
+                generated_dict = {
+                    'generated_bucket' + '_no' + str(i).zfill(15) + '_bucket_incident.csv':
+                        generated_bucket for i, generated_bucket in enumerate(generated_buckets)}
+
+                pos_counter += num_examples_to_generate
 
                 ride_data_dict.update(generated_dict)
 
-            np.savez(os.path.join(dir, split, region + '.npz'), **ride_data_dict)
+            np.savez(os.path.join(dir, 'train', region + '.npz'), **ride_data_dict)
 
-        class_counts_df['_'.join([split, region])] = [pos_counter, neg_counter]
+        class_counts_df['_'.join(['train', region])] = [pos_counter, neg_counter]
+        class_counts_df.to_csv(os.path.join(dir, class_counts_file), ',', index=False)
 
-    class_counts_df.to_csv(os.path.join(dir, class_counts_file), ',', index=False)
+    pbar.update(1) if pbar is not None else print()
 
 
-def fourier_transform_off_memory(dir, split, region, fft_window, slices, gps_flag, imag_flag, file_list):
+def fourier_transform_off_memory(dir, split, region, fft_window, slices, imag_flag, file_list):
     ride_data_dict = {}
 
     data_loaded = np.load(os.path.join(dir, split, region + '.npz'))
@@ -752,145 +644,104 @@ def fourier_transform_off_memory(dir, split, region, fft_window, slices, gps_fla
         ride_data = data_loaded[file]
         label = ride_data[:, :, -1]
 
-        if gps_flag:
-            gps = ride_data[:, :, 6:8]
-            ride_data_transformed = np.fft.fft(ride_data[:, :, :-3], axis=0)
+        gps = ride_data[:, :, 6:8]
+        ride_data_transformed = np.fft.fft(ride_data[:, :, :-3], axis=0)
 
-            data_transformed_real = np.real(ride_data_transformed)
-            data_transformed_imag = np.imag(ride_data_transformed)
+        data_transformed_real = np.real(ride_data_transformed)
+        data_transformed_imag = np.imag(ride_data_transformed)
 
-            if imag_flag:
-                ride_data_transformed = np.concatenate(
-                    (data_transformed_real, data_transformed_imag, gps, np.reshape(label, (fft_window, slices, 1))),
-                    axis=2)
-            else:
-                ride_data_transformed = np.concatenate(
-                    (data_transformed_real, gps, np.reshape(label, (fft_window, slices, 1))), axis=2)
+        if imag_flag:
+            ride_data_transformed = np.concatenate(
+                (data_transformed_real, data_transformed_imag, gps, np.reshape(label, (fft_window, slices, 1))),
+                axis=2)
         else:
-            ride_data_transformed = np.fft.fft(ride_data[:, :, :-1], axis=0)
-
-            data_transformed_real = np.real(ride_data_transformed)
-            data_transformed_imag = np.imag(ride_data_transformed)
-
-            if imag_flag:
-                ride_data_transformed = np.concatenate(
-                    (data_transformed_real, data_transformed_imag, np.reshape(label, (fft_window, slices, 1))), axis=2)
-            else:
-                ride_data_transformed = np.concatenate(
-                    (data_transformed_real, np.reshape(label, (fft_window, slices, 1))), axis=2)
+            ride_data_transformed = np.concatenate(
+                (data_transformed_real, gps, np.reshape(label, (fft_window, slices, 1))), axis=2)
 
         ride_data_dict.update({file: ride_data_transformed})
 
     return ride_data_dict
 
 
-def fourier_transform(dir, target_region=None, in_memory_flag=True, deepsense_flag=False, imag_flag=False, gps_flag=False, fft_window=5, slices=20):
-    for split in ['train', 'test', 'val']:
+def fourier_transform(dir, region='Berlin', in_memory_flag=True, fourier_transform_flag=False, window_size=5, slices=20, pbar=None):
 
-        for subdir in tqdm(glob.glob(os.path.join(dir, split, '*.npz')),
-                           desc='apply fourier transform to {} data'.format(split)):
-            region = os.path.basename(subdir).replace('.npz', '')
+    if fourier_transform_flag:
 
-            if target_region is not None and target_region != region:
-                continue
+        for split in ['train', 'test', 'val']:
 
             ride_data_dict = {}
 
-            if deepsense_flag:
+            if in_memory_flag:
+                data_loaded = np.load(os.path.join(dir, split, region + '.npz'))
+                data = data_loaded['arr_0']
 
-                if in_memory_flag:
-                    data_loaded = np.load(os.path.join(dir, split, region + '.npz'))
-                    data = data_loaded['arr_0']
+                label = data[:, :, :, -1]
 
-                    label = data[:, :, :, -1]
+                gps = data[:, :, :, 6:8]
+                data_transformed = np.fft.fft(data[:, :, :, :-3], axis=1)
+                data_transformed_real = np.real(data_transformed)
+                data_transformed_imag = np.imag(data_transformed)
 
-                    if gps_flag:
-                        gps = data[:, :, :, 6:8]
-                        data_transformed = np.fft.fft(data[:, :, :, :-3], axis=1)
-                        data_transformed_real = np.real(data_transformed)
-                        data_transformed_imag = np.imag(data_transformed)
+                data_transformed = np.concatenate((data_transformed_real, data_transformed_imag, gps,
+                                                   np.reshape(label, (-1, window_size, slices, 1))), axis=3)
 
-                        if imag_flag:
-                            data_transformed = np.concatenate((data_transformed_real, data_transformed_imag, gps, np.reshape(label, (-1, fft_window, slices, 1))), axis=3)
-                        else:
-                            data_transformed = np.concatenate((data_transformed_real, gps, np.reshape(label, (-1, fft_window, slices, 1))), axis=3)
-
-                    else:
-                        data_transformed = np.fft.fft(data[:, :, :, :-1], axis=1)
-                        data_transformed_real = np.real(data_transformed)
-                        data_transformed_imag = np.imag(data_transformed)
-
-                        if imag_flag:
-                            data_transformed = np.concatenate((data_transformed_real, data_transformed_imag, np.reshape(label, (-1, fft_window, slices, 1))), axis=3)
-                        else:
-                            data_transformed = np.concatenate((data_transformed_real, np.reshape(label, (-1, fft_window, slices, 1))), axis=3)
-
-                else:
-                    data_loaded = np.load(os.path.join(dir, split, region + '.npz'))
-                    file_list_splits = np.array_split(data_loaded.files, len(data_loaded.files))
-
-                    with mp.Pool(mp.cpu_count()) as pool:
-                        results = pool.map(partial(fourier_transform_off_memory, dir, split, region, fft_window, slices, gps_flag, imag_flag), file_list_splits)
-                        ride_data_dict = {}
-                        for result in results:
-                            ride_data_dict.update(result)
-
-                if in_memory_flag:
-                    np.savez(os.path.join(dir, split, region + '.npz'), data_transformed)
-                else:
-                    np.savez(os.path.join(dir, split, region + '.npz'), **ride_data_dict)
 
             else:
-                return
+                data_loaded = np.load(os.path.join(dir, split, region + '.npz'))
+                file_list_splits = np.array_split(data_loaded.files, len(data_loaded.files))
+
+                with mp.Pool(mp.cpu_count()) as pool:
+                    results = pool.map(
+                        partial(fourier_transform_off_memory, dir, split, region, window_size, slices, window_size),
+                        file_list_splits)
+                    ride_data_dict = {}
+                    for result in results:
+                        ride_data_dict.update(result)
+
+            if in_memory_flag:
+                np.savez(os.path.join(dir, split, region + '.npz'), data_transformed)
+            else:
+                np.savez(os.path.join(dir, split, region + '.npz'), **ride_data_dict)
+
+    pbar.update(1) if pbar is not None else print()
 
 
-def preprocess(dir, target_region=None, bucket_size=100, time_interval=100, interpolation_type='equidistant',
-               in_memory_flag=True, deepsense_flag=True, fft_window=5, slices=20, imag_flag=True, gps_flag=True,
-               data_augmentation_flag=False, rotation_flag=False, gan_flag=False, num_epochs=1000, batch_size=128,
-               noise_dim=100, class_counts_file='class_counts.csv', gan_checkpoint_dir='./gan_checkpoints'):
-    if gps_flag:
-        remove_invalid_rides(dir=dir, target_region=target_region)
-        remove_sensor_values_from_gps_timestamps(dir=dir, target_region=target_region)
-        remove_acc_outliers(dir=dir, target_region=target_region)
-        calc_vel_delta(dir=dir, target_region=target_region)
-        interpolate(dir=dir, target_region=target_region, time_interval=time_interval,
-                    interpolation_type=interpolation_type)
-        remove_vel_outliers(dir=dir, target_region=target_region)
-    else:
-        remove_sensor_values_from_gps_timestamps(dir=dir, target_region=target_region)
-        remove_acc_column(dir=dir, target_region=target_region)
-        interpolate(dir=dir, target_region=target_region, time_interval=time_interval,
-                    interpolation_type=interpolation_type)
+def preprocess(dir, region='Berlin', time_interval=100, interpolation_type='equidistant',
+               in_memory_flag=True, window_size=5, slices=20, fourier_transform_flag=False, rotation_flag=False,
+               gan_flag=False, num_epochs=1000, batch_size=128, noise_dim=100,
+               class_counts_file='class_counts.csv', gan_checkpoint_dir='./gan_checkpoints'):
 
-    remove_empty_rows(dir=dir, target_region=target_region, gps_flag=gps_flag)
-    scale(dir=dir, target_region=target_region)
-    create_buckets(dir=dir, target_region=target_region, bucket_size=bucket_size, in_memory_flag=in_memory_flag,
-                   deepsense_flag=deepsense_flag, fft_window=fft_window, slices=slices, gps_flag=gps_flag,
-                   class_counts_file=class_counts_file)
+    with tqdm(total=12, desc='preprocess') as pbar:
+        sort_timestamps(dir=dir, region=region, pbar=pbar)
+        remove_invalid_rides(dir=dir, region=region, pbar=pbar)
+        remove_sensor_values_from_gps_timestamps(dir=dir, region=region, pbar=pbar)
+        remove_acc_outliers(dir=dir, region=region, pbar=pbar)
+        calc_vel_delta(dir=dir, region=region, pbar=pbar)
+        interpolate(dir=dir, region=region, time_interval=time_interval, interpolation_type=interpolation_type,
+                    pbar=pbar)
+        remove_vel_outliers(dir=dir, region=region, pbar=pbar)
+        remove_empty_rows(dir=dir, region=region, pbar=pbar)
+        scale(dir=dir, region=region, pbar=pbar)
+        create_buckets(dir=dir, region=region, in_memory_flag=in_memory_flag, window_size=window_size,
+                       slices=slices, class_counts_file=class_counts_file, pbar=pbar)
 
-    if data_augmentation_flag and (rotation_flag or gan_flag):
-        augment_data(dir=dir, target_region=target_region, in_memory_flag=in_memory_flag, deepsense_flag=deepsense_flag,
-                     gps_flag=gps_flag, rotation_flag=rotation_flag, gan_flag=gan_flag, num_epochs=num_epochs,
+        augment_data(dir=dir, region=region, in_memory_flag=in_memory_flag, rotation_flag=rotation_flag, gan_flag=gan_flag, num_epochs=num_epochs,
                      batch_size=batch_size, noise_dim=noise_dim, class_counts_file=class_counts_file,
-                     gan_checkpoint_dir=gan_checkpoint_dir)
-    fourier_transform(dir=dir, target_region=target_region, in_memory_flag=in_memory_flag,
-                      deepsense_flag=deepsense_flag, imag_flag=imag_flag, gps_flag=gps_flag, fft_window=fft_window,
-                      slices=slices)
+                     gan_checkpoint_dir=gan_checkpoint_dir, pbar=pbar)
+
+        fourier_transform(dir=dir, region=region, in_memory_flag=in_memory_flag, fourier_transform_flag=fourier_transform_flag,
+                          window_size=window_size, slices=slices, pbar=pbar)
 
 
 if __name__ == '__main__':
     dir = '../Ride_Data'
-    target_region = None
-    bucket_size = 100
+    region = 'Berlin'
     time_interval = 100
     interpolation_type = 'equidistant'
-    deepsense_flag = True
-    fft_window = 5
+    window_size = 5
     slices = 20
     in_memory_flag = True
-    imag_flag = True
-    gps_flag = True
-    data_augmentation_flag = True
+    fourier_transform_flag = False
     rotation_flag = False
     gan_flag = False
     num_epochs = 1000
@@ -898,6 +749,7 @@ if __name__ == '__main__':
     noise_dim = 100
     class_counts_file = 'class_counts.csv'
     gan_checkpoint_dir = 'gan_checkpoints'
-    preprocess(dir, target_region, bucket_size, time_interval, interpolation_type, in_memory_flag, deepsense_flag,
-               fft_window, slices, imag_flag, gps_flag, data_augmentation_flag, rotation_flag, gan_flag, num_epochs,
-               batch_size, noise_dim, class_counts_file, gan_checkpoint_dir)
+    preprocess(dir=dir, region=region, time_interval=time_interval, interpolation_type=interpolation_type,
+               in_memory_flag=in_memory_flag, window_size=window_size, slices=slices, fourier_transform_flag=fourier_transform_flag,
+               rotation_flag=rotation_flag, gan_flag=gan_flag, num_epochs=num_epochs, batch_size=batch_size,
+               noise_dim=noise_dim, class_counts_file=class_counts_file, gan_checkpoint_dir=gan_checkpoint_dir)
