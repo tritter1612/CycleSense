@@ -550,8 +550,8 @@ def augment_data(dir, region='Berlin', in_memory_flag=True, rotation_flag=False,
 
                 generator, discriminator = init_gan(gan_checkpoint_dir, batch_size, noise_dim)
 
-                ds, pos_counter, neg_counter = create_ds(dir, region, 'train', batch_size, in_memory_flag, True,
-                                                         class_counts_file, filter_fn=lambda x, y: y[0] == 1)
+                ds, pos_counter, neg_counter = create_ds(dir, region, 'train', batch_size=batch_size, in_memory_flag=in_memory_flag, count=True,
+                                                         class_counts_file=class_counts_file, filter_fn=lambda x, y: y[0] == 1)
 
                 try:
                     generator.load_weights(os.path.join(gan_checkpoint_dir, 'generator'))
@@ -603,8 +603,8 @@ def augment_data(dir, region='Berlin', in_memory_flag=True, rotation_flag=False,
 
                 generator, discriminator = init_gan(gan_checkpoint_dir, batch_size, noise_dim)
 
-                ds, pos_counter, neg_counter = create_ds(dir, region, 'train', batch_size, in_memory_flag, True,
-                                                         class_counts_file, filter_fn=lambda x, y: y[0] == 1)
+                ds, pos_counter, neg_counter = create_ds(dir, region, 'train', batch_size=batch_size, in_memory_flag=in_memory_flag, count=True,
+                                                         class_counts_file=class_counts_file, filter_fn=lambda x, y: y[0] == 1)
 
                 try:
                     generator.load_weights(os.path.join(gan_checkpoint_dir, 'generator'))
@@ -635,7 +635,7 @@ def augment_data(dir, region='Berlin', in_memory_flag=True, rotation_flag=False,
     pbar.update(1) if pbar is not None else print()
 
 
-def fourier_transform_off_memory(dir, split, region, fft_window, slices, imag_flag, file_list):
+def fourier_transform_off_memory(dir, split, region, window_size, slices, imag_flag, file_list):
     ride_data_dict = {}
 
     data_loaded = np.load(os.path.join(dir, split, region + '.npz'))
@@ -652,11 +652,11 @@ def fourier_transform_off_memory(dir, split, region, fft_window, slices, imag_fl
 
         if imag_flag:
             ride_data_transformed = np.concatenate(
-                (data_transformed_real, data_transformed_imag, gps, np.reshape(label, (fft_window, slices, 1))),
+                (data_transformed_real, data_transformed_imag, gps, np.reshape(label, (window_size, slices, 1))),
                 axis=2)
         else:
             ride_data_transformed = np.concatenate(
-                (data_transformed_real, gps, np.reshape(label, (fft_window, slices, 1))), axis=2)
+                (data_transformed_real, gps, np.reshape(label, (window_size, slices, 1))), axis=2)
 
         ride_data_dict.update({file: ride_data_transformed})
 
