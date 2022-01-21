@@ -516,7 +516,7 @@ def rotate_bucket(ride_image, axis):
 
 
 def augment_data(dir, region='Berlin', in_memory_flag=True, rotation_flag=False, gan_flag=False, num_epochs=1000,
-                 batch_size=128, noise_dim=100, class_counts_file='class_counts.csv', gan_checkpoint_dir='gan_checkpoints', pbar=None):
+                 batch_size=128, latent_dim=100, class_counts_file='class_counts.csv', gan_checkpoint_dir='gan_checkpoints', pbar=None):
 
     if rotation_flag or gan_flag:
 
@@ -548,7 +548,7 @@ def augment_data(dir, region='Berlin', in_memory_flag=True, rotation_flag=False,
 
             if gan_flag:
 
-                generator, discriminator = init_gan(gan_checkpoint_dir, batch_size, noise_dim)
+                generator, discriminator = init_gan(gan_checkpoint_dir, batch_size, latent_dim)
 
                 ds, pos_counter, neg_counter = create_ds(dir, region, 'train', batch_size=batch_size, in_memory_flag=in_memory_flag, count=True,
                                                          class_counts_file=class_counts_file, filter_fn=lambda x, y: y[0] == 1)
@@ -562,7 +562,7 @@ def augment_data(dir, region='Berlin', in_memory_flag=True, rotation_flag=False,
 
                 factor = 0.1
                 num_examples_to_generate = int((neg_counter - pos_counter) * factor)
-                generated_buckets = generator(tf.random.normal([num_examples_to_generate, noise_dim]), training=False)
+                generated_buckets = generator(tf.random.normal([num_examples_to_generate, latent_dim]), training=False)
                 generated_buckets = tf.concat([generated_buckets, tf.ones_like(generated_buckets)[:, :, :, :1]], axis=3)
 
                 data = tf.concat([tf.cast(data, tf.float32), generated_buckets], axis=0)
@@ -601,7 +601,7 @@ def augment_data(dir, region='Berlin', in_memory_flag=True, rotation_flag=False,
 
             if gan_flag:
 
-                generator, discriminator = init_gan(gan_checkpoint_dir, batch_size, noise_dim)
+                generator, discriminator = init_gan(gan_checkpoint_dir, batch_size, latent_dim)
 
                 ds, pos_counter, neg_counter = create_ds(dir, region, 'train', batch_size=batch_size, in_memory_flag=in_memory_flag, count=True,
                                                          class_counts_file=class_counts_file, filter_fn=lambda x, y: y[0] == 1)
@@ -615,7 +615,7 @@ def augment_data(dir, region='Berlin', in_memory_flag=True, rotation_flag=False,
 
                 factor = 0.1
                 num_examples_to_generate = int((neg_counter - pos_counter) * factor)
-                generated_buckets = generator(tf.random.normal([num_examples_to_generate, noise_dim]),
+                generated_buckets = generator(tf.random.normal([num_examples_to_generate, latent_dim]),
                                               training=False)
                 generated_buckets = tf.concat([generated_buckets, tf.ones_like(generated_buckets)[:, :, :, :1]], axis=3)
 
@@ -708,7 +708,7 @@ def fourier_transform(dir, region='Berlin', in_memory_flag=True, fourier_transfo
 
 def preprocess(dir, region='Berlin', time_interval=100, interpolation_type='equidistant',
                in_memory_flag=True, window_size=5, slices=20, fourier_transform_flag=False, rotation_flag=False,
-               gan_flag=False, num_epochs=1000, batch_size=128, noise_dim=100,
+               gan_flag=False, num_epochs=1000, batch_size=128, latent_dim=100,
                class_counts_file='class_counts.csv', gan_checkpoint_dir='./gan_checkpoints'):
 
     with tqdm(total=12, desc='preprocess') as pbar:
@@ -726,7 +726,7 @@ def preprocess(dir, region='Berlin', time_interval=100, interpolation_type='equi
                        slices=slices, class_counts_file=class_counts_file, pbar=pbar)
 
         augment_data(dir=dir, region=region, in_memory_flag=in_memory_flag, rotation_flag=rotation_flag, gan_flag=gan_flag, num_epochs=num_epochs,
-                     batch_size=batch_size, noise_dim=noise_dim, class_counts_file=class_counts_file,
+                     batch_size=batch_size, latent_dim=latent_dim, class_counts_file=class_counts_file,
                      gan_checkpoint_dir=gan_checkpoint_dir, pbar=pbar)
 
         fourier_transform(dir=dir, region=region, in_memory_flag=in_memory_flag, fourier_transform_flag=fourier_transform_flag,
@@ -746,10 +746,10 @@ if __name__ == '__main__':
     gan_flag = False
     num_epochs = 1000
     batch_size = 128
-    noise_dim = 100
+    latent_dim = 100
     class_counts_file = 'class_counts.csv'
     gan_checkpoint_dir = 'gan_checkpoints'
     preprocess(dir=dir, region=region, time_interval=time_interval, interpolation_type=interpolation_type,
                in_memory_flag=in_memory_flag, window_size=window_size, slices=slices, fourier_transform_flag=fourier_transform_flag,
                rotation_flag=rotation_flag, gan_flag=gan_flag, num_epochs=num_epochs, batch_size=batch_size,
-               noise_dim=noise_dim, class_counts_file=class_counts_file, gan_checkpoint_dir=gan_checkpoint_dir)
+               latent_dim=latent_dim, class_counts_file=class_counts_file, gan_checkpoint_dir=gan_checkpoint_dir)
