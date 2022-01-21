@@ -22,7 +22,7 @@ class ESN_Model(tf.keras.models.Sequential):
 
 
 def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1,
-          checkpoint_dir='checkpoints/cnn/training'):
+          checkpoint_dir='checkpoints/esn/training'):
     model = ESN_Model()
     model.create_model()
 
