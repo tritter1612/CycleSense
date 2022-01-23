@@ -26,24 +26,26 @@ def autoencoder():
 
 
 def classifier(autoencoder_checkpoint_dir):
-    x = tf.keras.layers.Input(shape=(100, 8))
+    x = tf.keras.layers.Input(shape=(20, 5, 8))
 
     encode1 = Flatten()(x)
-    encode2 = Dense(32 * 6, activation="relu", trainable=False)(encode1)
-    encode3 = Dense(16 * 6, activation="relu", trainable=False)(encode2)
-    encode4 = Dense(8 * 6, activation="relu", trainable=False)(encode3)
+    encode2 = Flatten()(encode1)
+    encode3 = Dense(32 * 6, activation="relu", trainable=False)(encode2)
+    encode4 = Dense(16 * 6, activation="relu", trainable=False)(encode3)
+    encode5 = Dense(8 * 6, activation="relu", trainable=False)(encode4)
 
-    decode1 = Dense(16 * 6, activation="relu")(encode4)
+    decode1 = Dense(16 * 6, activation="relu")(encode5)
     decode2 = Dense(32 * 6, activation="relu")(decode1)
     decode3 = Dense(800, activation="sigmoid")(decode2)
     decode4 = Reshape((100, 8))(decode3)
+    decode5 = Reshape((20, 5, 8))(decode4)
 
-    autoencoder = tf.keras.Model(x, decode4)
+    autoencoder = tf.keras.Model(x, decode5)
 
     autoencoder.load_weights(tf.train.latest_checkpoint(
         os.path.dirname(autoencoder_checkpoint_dir)))
 
-    pred1 = Dense(8 * 4, activation='relu')(encode4)
+    pred1 = Dense(8 * 4, activation='relu')(encode5)
     pred2 = Dense(8 * 2, activation='relu')(pred1)
     pred3 = Dense(1, activation='sigmoid')(pred2)
 
