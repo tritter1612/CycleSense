@@ -71,7 +71,7 @@ def create_ds(dir, region, split, batch_size=32, in_memory_flag=True, count=Fals
     ds = ds.filter(filter_fn) if filter_fn is not None else ds
     ds = ds.batch(batch_size, num_parallel_calls=tf.data.AUTOTUNE, deterministic=True)
     ds = ds.prefetch(tf.data.AUTOTUNE)
-    ds = ds.cache(os.path.join(cache_dir, split)) if cache_dir is not None else ds
+    ds = ds.cache(cache_dir + '_' + split) if cache_dir is not None else ds
 
     if count:
         class_counts_df = pd.read_csv(os.path.join(dir, class_counts_file))
