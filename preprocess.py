@@ -10,7 +10,7 @@ from sklearn.preprocessing import MaxAbsScaler
 from functools import partial
 import joblib
 
-from data_loader import create_ds, pack_features_vector, set_input_shape_global
+from data_loader import create_ds, set_input_shape_global
 from gan import init_gan, train_gan
 
 
@@ -515,8 +515,39 @@ def rotate_bucket(ride_image, axis):
     return ride_image_rotated
 
 
+def augment_data_inner(dir, region, rotation_flag, files):
+
+    ride_data_dict = {}
+    data_loaded = np.load(os.path.join(dir, 'train', region + '.npz'))
+    pos_counter = 0
+
+    for file in files:
+
+        ride_image = data_loaded[file]
+
+        ride_data_dict.update({file: ride_image})
+
+        if rotation_flag:
+
+            if np.any(ride_image[:, :, -1]) > 0:
+                dict_name_rotated_X = file.replace('_bucket_incident', '') + '_rotated_X_bucket_incident'
+                dict_name_rotated_Y = file.replace('_bucket_incident', '') + '_rotated_Y_bucket_incident'
+                dict_name_rotated_Z = file.replace('_bucket_incident', '') + '_rotated_Z_bucket_incident'
+
+                ride_image_rotated_X = rotate_bucket(ride_image, axis=0)
+                ride_image_rotated_Y = rotate_bucket(ride_image, axis=1)
+                ride_image_rotated_Z = rotate_bucket(ride_image, axis=2)
+
+                ride_data_dict.update({dict_name_rotated_X: ride_image_rotated_X})
+                ride_data_dict.update({dict_name_rotated_Y: ride_image_rotated_Y})
+                ride_data_dict.update({dict_name_rotated_Z: ride_image_rotated_Z})
+                pos_counter += 3
+
+    return ride_data_dict, pos_counter
+
+
 def augment_data(dir, region='Berlin', in_memory_flag=True, rotation_flag=False, gan_flag=False, num_epochs=1000,
-                 batch_size=128, latent_dim=100, class_counts_file='class_counts.csv', gan_checkpoint_dir='gan_checkpoints', pbar=None):
+                 batch_size=128, latent_dim=100, input_shape=(None, 5, 20, 8), class_counts_file='class_counts.csv', gan_checkpoint_dir='gan_checkpoints', pbar=None):
 
     if rotation_flag or gan_flag:
 
@@ -550,6 +581,8 @@ def augment_data(dir, region='Berlin', in_memory_flag=True, rotation_flag=False,
 
                 generator, discriminator = init_gan(gan_checkpoint_dir, batch_size, latent_dim)
 
+                set_input_shape_global(input_shape)
+
                 ds, pos_counter, neg_counter = create_ds(dir, region, 'train', batch_size=batch_size, in_memory_flag=in_memory_flag, count=True,
                                                          class_counts_file=class_counts_file, filter_fn=lambda x, y: y[0] == 1)
 
@@ -575,36 +608,24 @@ def augment_data(dir, region='Berlin', in_memory_flag=True, rotation_flag=False,
 
             data_loaded = np.load(os.path.join(dir, 'train', region + '.npz'))
 
+            file_list_splits = np.array_split(data_loaded.files, mp.cpu_count())
+
+            with mp.Pool(mp.cpu_count()) as pool:
+                results = pool.map(partial(augment_data_inner, dir, region, rotation_flag), file_list_splits)
+
             ride_data_dict = {}
-
-            for file in data_loaded.files:
-
-                ride_image = data_loaded[file]
-
-                ride_data_dict.update({file: ride_image})
-
-                if rotation_flag:
-
-                    if np.any(ride_image[:, :, -1]) > 0:
-                        dict_name_rotated_X = file.replace('_bucket_incident', '') + '_rotated_X_bucket_incident'
-                        dict_name_rotated_Y = file.replace('_bucket_incident', '') + '_rotated_Y_bucket_incident'
-                        dict_name_rotated_Z = file.replace('_bucket_incident', '') + '_rotated_Z_bucket_incident'
-
-                        ride_image_rotated_X = rotate_bucket(ride_image, axis=0)
-                        ride_image_rotated_Y = rotate_bucket(ride_image, axis=1)
-                        ride_image_rotated_Z = rotate_bucket(ride_image, axis=2)
-
-                        ride_data_dict.update({dict_name_rotated_X: ride_image_rotated_X})
-                        ride_data_dict.update({dict_name_rotated_Y: ride_image_rotated_Y})
-                        ride_data_dict.update({dict_name_rotated_Z: ride_image_rotated_Z})
-                        pos_counter += 3
+            for ride_data_dict_local, pos_counter_local in results:
+                ride_data_dict.update(ride_data_dict_local)
+                pos_counter += pos_counter_local
 
             if gan_flag:
 
                 generator, discriminator = init_gan(gan_checkpoint_dir, batch_size, latent_dim)
 
+                set_input_shape_global(input_shape)
+
                 ds, pos_counter, neg_counter = create_ds(dir, region, 'train', batch_size=batch_size, in_memory_flag=in_memory_flag, count=True,
-                                                         class_counts_file=class_counts_file, filter_fn=lambda x, y: y[0] == 1)
+                                                         class_counts_file=class_counts_file, filter_fn=lambda x, y: y == 1)
 
                 try:
                     generator.load_weights(os.path.join(gan_checkpoint_dir, 'generator'))
@@ -617,11 +638,11 @@ def augment_data(dir, region='Berlin', in_memory_flag=True, rotation_flag=False,
                 num_examples_to_generate = int((neg_counter - pos_counter) * factor)
                 generated_buckets = generator(tf.random.normal([num_examples_to_generate, latent_dim]),
                                               training=False)
+
                 generated_buckets = tf.concat([generated_buckets, tf.ones_like(generated_buckets)[:, :, :, :1]], axis=3)
 
-                generated_dict = {
-                    'generated_bucket' + '_no' + str(i).zfill(15) + '_bucket_incident.csv':
-                        generated_bucket for i, generated_bucket in enumerate(generated_buckets)}
+                generated_dict = {'generated_bucket' + '_no' + str(i).zfill(15) + '_bucket_incident.csv':
+                                      generated_bucket for i, generated_bucket in enumerate(generated_buckets)}
 
                 pos_counter += num_examples_to_generate
 
@@ -688,7 +709,7 @@ def fourier_transform(dir, region='Berlin', in_memory_flag=True, fourier_transfo
 
             else:
                 data_loaded = np.load(os.path.join(dir, split, region + '.npz'))
-                file_list_splits = np.array_split(data_loaded.files, len(data_loaded.files))
+                file_list_splits = np.array_split(data_loaded.files, mp.cpu_count())
 
                 with mp.Pool(mp.cpu_count()) as pool:
                     results = pool.map(
@@ -708,7 +729,7 @@ def fourier_transform(dir, region='Berlin', in_memory_flag=True, fourier_transfo
 
 def preprocess(dir, region='Berlin', time_interval=100, interpolation_type='equidistant',
                in_memory_flag=True, window_size=5, slices=20, fourier_transform_flag=False, rotation_flag=False,
-               gan_flag=False, num_epochs=1000, batch_size=128, latent_dim=100,
+               gan_flag=False, num_epochs=1000, batch_size=128, latent_dim=100, input_shape=(None, 5, 20, 8),
                class_counts_file='class_counts.csv', gan_checkpoint_dir='./gan_checkpoints'):
 
     with tqdm(total=12, desc='preprocess') as pbar:
@@ -726,7 +747,7 @@ def preprocess(dir, region='Berlin', time_interval=100, interpolation_type='equi
                        slices=slices, class_counts_file=class_counts_file, pbar=pbar)
 
         augment_data(dir=dir, region=region, in_memory_flag=in_memory_flag, rotation_flag=rotation_flag, gan_flag=gan_flag, num_epochs=num_epochs,
-                     batch_size=batch_size, latent_dim=latent_dim, class_counts_file=class_counts_file,
+                     batch_size=batch_size, latent_dim=latent_dim, input_shape=input_shape, class_counts_file=class_counts_file,
                      gan_checkpoint_dir=gan_checkpoint_dir, pbar=pbar)
 
         fourier_transform(dir=dir, region=region, in_memory_flag=in_memory_flag, fourier_transform_flag=fourier_transform_flag,
@@ -747,9 +768,10 @@ if __name__ == '__main__':
     num_epochs = 1000
     batch_size = 128
     latent_dim = 100
+    input_shape = (None, 5, 20, 8)
     class_counts_file = 'class_counts.csv'
     gan_checkpoint_dir = 'gan_checkpoints'
-    preprocess(dir=dir, region=region, time_interval=time_interval, interpolation_type=interpolation_type,
-               in_memory_flag=in_memory_flag, window_size=window_size, slices=slices, fourier_transform_flag=fourier_transform_flag,
-               rotation_flag=rotation_flag, gan_flag=gan_flag, num_epochs=num_epochs, batch_size=batch_size,
-               latent_dim=latent_dim, class_counts_file=class_counts_file, gan_checkpoint_dir=gan_checkpoint_dir)
+    preprocess(dir=dir, region=region, time_interval=time_interval, interpolation_type=interpolation_type, in_memory_flag=in_memory_flag,
+               window_size=window_size, slices=slices, fourier_transform_flag=fourier_transform_flag, rotation_flag=rotation_flag,
+               gan_flag=gan_flag, num_epochs=num_epochs, batch_size=batch_size, latent_dim=latent_dim, input_shape=input_shape,
+               class_counts_file=class_counts_file, gan_checkpoint_dir=gan_checkpoint_dir)
