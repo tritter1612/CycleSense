@@ -40,7 +40,7 @@ def remove_invalid_rides_inner(file):
     df_cp.dropna(inplace=True, axis=0)
 
     if len(df_cp) == 0 or len(breakpoints[0]) > 0:
-        # remove rides where one col is completely empty or gps timestamp interval is too long
+        # remove rides where one col is completely empty or timestamp interval is too long
         os.remove(file)
 
 
@@ -260,6 +260,7 @@ def equidistant_interpolate(time_interval, file):
 
     incident_list = df.loc[df['incident'] > 0]
 
+    # Assign an incident to the nearest timestamp after equidistant interpolation
     for i in range(incident_list.shape[0]):
 
         found = False
@@ -269,7 +270,8 @@ def equidistant_interpolate(time_interval, file):
             idx = df.index[df.index.get_loc(incident_list.iloc[i]['timeStamp'], method='nearest')]
 
             if idx not in removables:
-                df.at[idx, 'incident'] = 1.0  # TODO: preserve incident type
+                # binary time series classification
+                df.at[idx, 'incident'] = 1.0
                 found = True
             else:
                 df = df.drop(idx)
@@ -384,7 +386,7 @@ def scale_inner(scaler_maxabs, file):
     df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c']] = scaler_maxabs.transform(
         df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c']])
 
-    # change order of features
+    # change order of features and remove timestamp column
     df[['X', 'Y', 'Z', 'a', 'b', 'c', 'lat', 'lon', 'incident']].to_csv(file, ',', index=False)
 
 
@@ -432,7 +434,7 @@ def create_buckets(dir, region='Berlin', in_memory_flag=True, window_size=5, sli
 
             arr = np.genfromtxt(file, delimiter=',', skip_header=True)
 
-            # remove first and last 15 seconds of a ride
+            # remove first and last 60 measurements of a ride
             try:
                 arr = arr[60:-60, :]
             except:
