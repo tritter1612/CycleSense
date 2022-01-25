@@ -575,8 +575,6 @@ def augment_data(dir, region='Berlin', in_memory_flag=True, rotation_flag=False,
                         ride_images_list.append(ride_image_rotated_Z)
                         pos_counter += 3
 
-                np.savez(os.path.join(dir, 'train', region + '.npz'), ride_images_list)
-
             if gan_flag:
 
                 generator, discriminator = init_gan(gan_checkpoint_dir, batch_size, latent_dim)
@@ -602,7 +600,7 @@ def augment_data(dir, region='Berlin', in_memory_flag=True, rotation_flag=False,
                 data = tf.random.shuffle(data)
                 pos_counter += num_examples_to_generate
 
-                np.savez(os.path.join(dir, 'train', region + '.npz'), data)
+            np.savez(os.path.join(dir, 'train', region + '.npz'), data)
 
         else:
 
@@ -656,14 +654,14 @@ def augment_data(dir, region='Berlin', in_memory_flag=True, rotation_flag=False,
     pbar.update(1) if pbar is not None else print()
 
 
-def fourier_transform_off_memory(dir, split, region, window_size, slices, imag_flag, file_list):
+def fourier_transform_off_memory(dir, split, region, window_size, slices, file_list):
     ride_data_dict = {}
 
     data_loaded = np.load(os.path.join(dir, split, region + '.npz'))
 
     for file in file_list:
         ride_data = data_loaded[file]
-        label = ride_data[:, :, -1]
+        label = ride_data[:, :, -1:]
 
         gps = ride_data[:, :, 6:8]
         ride_data_transformed = np.fft.fft(ride_data[:, :, :-3], axis=0)
@@ -671,13 +669,8 @@ def fourier_transform_off_memory(dir, split, region, window_size, slices, imag_f
         data_transformed_real = np.real(ride_data_transformed)
         data_transformed_imag = np.imag(ride_data_transformed)
 
-        if imag_flag:
-            ride_data_transformed = np.concatenate(
-                (data_transformed_real, data_transformed_imag, gps, np.reshape(label, (window_size, slices, 1))),
-                axis=2)
-        else:
-            ride_data_transformed = np.concatenate(
-                (data_transformed_real, gps, np.reshape(label, (window_size, slices, 1))), axis=2)
+        ride_data_transformed = np.concatenate(
+            (data_transformed_real, data_transformed_imag, gps, label), axis=2)
 
         ride_data_dict.update({file: ride_data_transformed})
 
@@ -696,15 +689,14 @@ def fourier_transform(dir, region='Berlin', in_memory_flag=True, fourier_transfo
                 data_loaded = np.load(os.path.join(dir, split, region + '.npz'))
                 data = data_loaded['arr_0']
 
-                label = data[:, :, :, -1]
+                label = data[:, :, :, -1:]
 
                 gps = data[:, :, :, 6:8]
                 data_transformed = np.fft.fft(data[:, :, :, :-3], axis=1)
                 data_transformed_real = np.real(data_transformed)
                 data_transformed_imag = np.imag(data_transformed)
 
-                data_transformed = np.concatenate((data_transformed_real, data_transformed_imag, gps,
-                                                   np.reshape(label, (-1, window_size, slices, 1))), axis=3)
+                data_transformed = np.concatenate((data_transformed_real, data_transformed_imag, gps, label), axis=3)
 
 
             else:
@@ -713,7 +705,7 @@ def fourier_transform(dir, region='Berlin', in_memory_flag=True, fourier_transfo
 
                 with mp.Pool(mp.cpu_count()) as pool:
                     results = pool.map(
-                        partial(fourier_transform_off_memory, dir, split, region, window_size, slices, window_size),
+                        partial(fourier_transform_off_memory, dir, split, region, window_size, slices),
                         file_list_splits)
                     ride_data_dict = {}
                     for result in results:
@@ -768,7 +760,7 @@ if __name__ == '__main__':
     num_epochs = 1000
     batch_size = 128
     latent_dim = 100
-    input_shape = (None, 5, 20, 8)
+    input_shape = (None, window_size, slices, 8)
     class_counts_file = 'class_counts.csv'
     gan_checkpoint_dir = 'gan_checkpoints'
     preprocess(dir=dir, region=region, time_interval=time_interval, interpolation_type=interpolation_type, in_memory_flag=in_memory_flag,
