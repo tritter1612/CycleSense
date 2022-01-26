@@ -15,8 +15,8 @@ class CNN_(tf.keras.models.Sequential):
         super().__init__()
 
     def create_model(self):
-        self.add(Conv2D(filters=64, kernel_size=3, activation='relu'))
-        self.add(Conv2D(filters=64, kernel_size=3, activation='relu'))
+        self.add(Conv2D(filters=64, kernel_size=(3, 3), activation='relu'))
+        self.add(Conv2D(filters=64, kernel_size=(3, 3), activation='relu'))
         self.add(Flatten())
         self.add(Dense(1, activation='sigmoid'))
 
@@ -101,12 +101,13 @@ if __name__ == '__main__':
     slices = 20
     class_counts_file = os.path.join(dir, 'class_counts.csv')
     input_shape = (None, window_size * slices, window_size * slices, 8)
+    deterministic = False
     transpose_flag = True
     gaf_flag = True
     cache_dir = dir + '_cache'
 
-    train_ds, val_ds, test_ds, class_weight = load_data(dir, target_region, input_shape=input_shape,
-                                                        batch_size=batch_size, in_memory_flag=in_memory_flag,
+    train_ds, val_ds, test_ds, class_weight = load_data(dir, target_region, input_shape=input_shape, batch_size=batch_size,
+                                                        in_memory_flag=in_memory_flag, deterministic=deterministic,
                                                         transpose_flag=transpose_flag, gaf_flag=gaf_flag,
                                                         class_counts_file=class_counts_file, cache_dir=cache_dir)
 
