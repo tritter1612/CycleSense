@@ -28,6 +28,10 @@ def export_file(target_dir, split, file):
             system_no = system_no[1:]
 
         if (system == 'a' and system_no.isdecimal() and int(system_no) >= 48) or (system == 'i' and int(system_no) >= 5 and int(system_no) <= 15 and int(system_no) != 14 and int(system_no) != 6):
+
+            if (system == 'a' and system_no.isdecimal() and int(system_no) < 73):
+                system = 'o'
+
             incident_info = parts[0]
             ride_info = parts[2]
             incident_info_lines = incident_info.splitlines()
@@ -177,7 +181,7 @@ def export_file(target_dir, split, file):
             except:
                 pass
 
-            df.to_csv(os.path.join(target_dir, split, region, os.path.basename(file) + '.csv'), ',', index=False)
+            df.to_csv(os.path.join(target_dir, split, region, os.path.basename(file) + system + '.csv'), ',', index=False)
 
 
 def export(data_dir, target_dir, target_region=None):
