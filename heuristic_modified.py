@@ -86,19 +86,18 @@ def get_metrics(dir, target_region=None, bucket_size=10000):
         fpr, tpr, threshold = roc_curve(y, scores)
 
         # 6 proposals per ride at average
-        print("Rides: " + str(num_rides))
+        print('Rides: ' + str(num_rides))
         fpr_allowed = 6 * num_rides / num_buckets
-        print("Specificity for at average 6 proposals per ride has to be at least: " + str(1 - fpr_allowed))
-        # find the last fpr which is <= the allowed fpr by going thru the ordered fpr list
+        print('Specificity for at average 6 proposals per ride has to be at least: ' + str(1 - fpr_allowed))
+        # find the last fpr which is <= the allowed fpr by going through the ordered fpr list
         for i in range(fpr.shape[0]):
             if fpr[i] <= fpr_allowed:
-                # print(1 - fpr[i], tpr[i], threshold[i])
                 last = i
         # print sensitivity at specificity
-        print("Sensitivity at This specificity with Threshold:")
+        print('Sensitivity at This specificity with Threshold:')
         print(tpr[last], 1 - fpr[last], threshold[last])
         tn, fp, fn, tp = confusion_matrix(y, scores >= threshold[last]).ravel()
-        print("Confusion Matrix:")
+        print('Confusion Matrix:')
         print(tn, fp)
         print(fn, tp)
 
