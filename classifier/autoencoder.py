@@ -50,9 +50,11 @@ def classifier(autoencoder_checkpoint_dir):
 
     pred1 = Dense(8 * 4, activation='relu')(encode5)
     pred2 = Dense(8 * 2, activation='relu')(pred1)
-    pred3 = Dense(1, activation='sigmoid')(pred2)
+    pred3 = Dense(8 * 1, activation='relu')(pred2)
+    pred4 = Dense(4, activation='relu')(pred3)
+    pred5 = Dense(1, activation='sigmoid')(pred4)
 
-    cl = tf.keras.Model(x, pred3)
+    cl = tf.keras.Model(x, pred5)
 
     return cl
 
