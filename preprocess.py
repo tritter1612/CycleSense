@@ -1,8 +1,10 @@
 import os
+import logging
 import glob
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+tf.get_logger().setLevel(logging.ERROR)
 import datetime as dt
 import multiprocessing as mp
 from tqdm.auto import tqdm
@@ -756,9 +758,9 @@ if __name__ == '__main__':
     window_size = 5
     slices = 20
     in_memory_flag = True
-    fourier_transform_flag = False
+    fourier_transform_flag = True
     rotation_flag = False
-    gan_flag = False
+    gan_flag = True
     num_epochs = 1000
     batch_size = 128
     latent_dim = 100

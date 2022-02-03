@@ -1,9 +1,10 @@
 import os
 import sys
-
+import logging
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+tf.get_logger().setLevel(logging.ERROR)
 
 from pyts.image import GramianAngularField
 

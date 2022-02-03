@@ -1,8 +1,10 @@
 import os
+import logging
 import numpy as np
 from datetime import datetime
 import tensorflow as tf
 from tensorflow.keras.layers import Dense, Flatten, Conv2D
+tf.get_logger().setLevel(logging.ERROR)
 from sklearn.metrics import confusion_matrix
 
 from data_loader import load_data
@@ -92,7 +94,7 @@ if __name__ == '__main__':
     checkpoint_dir = 'checkpoints/gaf_cnn/training'
     target_region = 'Berlin'
     bucket_size = 100
-    batch_size = 512
+    batch_size = 128
     in_memory_flag = False
     num_epochs = 100
     patience = 10

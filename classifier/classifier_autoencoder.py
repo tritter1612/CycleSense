@@ -1,7 +1,10 @@
 import os
 import sys
+import logging
 import tensorflow as tf
 from tensorflow.keras.layers import Dense, Flatten, Reshape
+tf.get_logger().setLevel(logging.ERROR)
+
 from data_loader import load_data
 
 

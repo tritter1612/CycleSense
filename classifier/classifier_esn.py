@@ -1,8 +1,10 @@
 import os
+import logging
 import numpy as np
 from datetime import datetime
 import tensorflow as tf
 from tensorflow.keras.layers import Reshape
+tf.get_logger().setLevel(logging.ERROR)
 from sklearn.metrics import confusion_matrix
 
 from data_loader import load_data
