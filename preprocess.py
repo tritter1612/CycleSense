@@ -269,7 +269,7 @@ def equidistant_interpolate(time_interval, file):
 
         while found != True:
 
-            idx = df.index[df.index.get_loc(incident_list.iloc[i]['timeStamp'], method='nearest')]
+            idx = df.index[df.index.get_indexer([incident_list.iloc[i]['timeStamp']], method='nearest')[0]]
 
             if idx not in removables:
                 # binary time series classification
@@ -449,7 +449,7 @@ def create_buckets(dir, region='Berlin', in_memory_flag=True, window_size=5, sli
                 arr = np.reshape(arr[:range, :], (int(range / (window_size * slices)), slices, window_size, arr.shape[1]))
                 arr = np.transpose(arr, axes=(0, 2, 1, 3))
 
-                labels = np.reshape(arr[:, :, :, 8], (arr.shape[0], slices * window_size))
+                labels = np.reshape(arr[:, :, :, -1], (arr.shape[0], slices * window_size))
                 labels = np.any(labels, axis=1)
 
                 pos_counter += np.sum(labels)
@@ -457,12 +457,12 @@ def create_buckets(dir, region='Berlin', in_memory_flag=True, window_size=5, sli
 
                 if in_memory_flag:
                     for i, bucket in enumerate(arr):
-                        bucket[:, :, 8] = labels[i]
+                        bucket[:, :, -1] = labels[i]
                         buckets_list.append(bucket)
 
                 else:
                     for i, bucket in enumerate(arr):
-                        bucket[:, :, 8] = labels[i]
+                        bucket[:, :, -1] = labels[i]
                         dict_name = os.path.basename(file).replace('.csv', '') + \
                                     '_no' + str(i).zfill(5) + '_bucket_incident'
                         buckets_dict.update({dict_name: bucket})
@@ -667,7 +667,7 @@ def fourier_transform_off_memory(dir, split, region, window_size, slices, file_l
         ride_data = data_loaded[file]
         label = ride_data[:, :, -1:]
 
-        gps = ride_data[:, :, 6:8]
+        gps = ride_data[:, :, -3:-1]
         ride_data_transformed = np.fft.fft(ride_data[:, :, :-3], axis=0)
 
         data_transformed_real = np.real(ride_data_transformed)
@@ -695,7 +695,7 @@ def fourier_transform(dir, region='Berlin', in_memory_flag=True, fourier_transfo
 
                 label = data[:, :, :, -1:]
 
-                gps = data[:, :, :, 6:8]
+                gps = data[:, :, :,-3:-1]
                 data_transformed = np.fft.fft(data[:, :, :, :-3], axis=1)
                 data_transformed_real = np.real(data_transformed)
                 data_transformed_imag = np.imag(data_transformed)
