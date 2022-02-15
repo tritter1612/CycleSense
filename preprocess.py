@@ -56,7 +56,7 @@ def remove_invalid_rides(dir, region='Berlin', pbar=None):
     pbar.update(1) if pbar is not None else print()
 
 
-def remove_sensor_values_from_gps_timestamps_inner(file):
+def remove_sensor_values_from_gps_timestamps_inner(lin_acc_flag, file):
     # for android data remove accelerometer and gyroscope sensor data from gps measurements as timestamps is rounded to seconds and order is not restorable
 
     if os.path.splitext(file)[0][-1] == 'a':
@@ -65,16 +65,18 @@ def remove_sensor_values_from_gps_timestamps_inner(file):
         df_cp = df_cp[['lat', 'lon', 'acc']].dropna()
         df_cp = df.iloc[df_cp.index.values].copy(True)
         df_cp[['X', 'Y', 'Z', 'a', 'b', 'c']] = ''
+        if lin_acc_flag:
+            df_cp[['XL', 'YL', 'ZL']] = ''
         df.iloc[df_cp.index] = df_cp
         df.to_csv(file, ',', index=False)
 
 
-def remove_sensor_values_from_gps_timestamps(dir, region='Berlin', pbar=None):
+def remove_sensor_values_from_gps_timestamps(dir, region='Berlin', lin_acc_flag=False, pbar=None):
     for split in ['train', 'test', 'val']:
         file_list = glob.glob(os.path.join(dir, split, region, 'VM2_*.csv'))
 
         with mp.Pool(mp.cpu_count()) as pool:
-            pool.map(remove_sensor_values_from_gps_timestamps_inner, file_list)
+            pool.map(partial(remove_sensor_values_from_gps_timestamps_inner, lin_acc_flag), file_list)
 
     pbar.update(1) if pbar is not None else print()
 
@@ -172,7 +174,7 @@ def calc_vel_delta(dir, region='Berlin', pbar=None):
     pbar.update(1) if pbar is not None else print()
 
 
-def linear_interpolate(file):
+def linear_interpolate(lin_acc_flag, file):
     df = pd.read_csv(file)
 
     # convert timestamp to datetime format
@@ -195,6 +197,11 @@ def linear_interpolate(file):
     df['b'].interpolate(method='time', inplace=True)
     df['c'].interpolate(method='time', inplace=True)
 
+    if os.path.splitext(file)[0][-1] == 'a' and lin_acc_flag:
+        df['XL'].interpolate(method='time', inplace=True)
+        df['YL'].interpolate(method='time', inplace=True)
+        df['ZL'].interpolate(method='time', inplace=True)
+
     # interpolation of missing values via padding on the reversed df
     df.sort_index(axis=0, ascending=False, inplace=True)
     df['lat'].interpolate(method='pad', inplace=True)
@@ -208,7 +215,7 @@ def linear_interpolate(file):
     df.to_csv(file, ',', index=False)
 
 
-def equidistant_interpolate(time_interval, file):
+def equidistant_interpolate(time_interval, lin_acc_flag, file):
     df = pd.read_csv(file)
 
     # floor start_time so that full seconds are included in the new timestamp series (time_interval may be 50, 100, 125 or 200ms)
@@ -253,6 +260,11 @@ def equidistant_interpolate(time_interval, file):
     df['b'].interpolate(method='time', inplace=True)
     df['c'].interpolate(method='time', inplace=True)
 
+    if os.path.splitext(file)[0][-1] == 'a' and lin_acc_flag:
+        df['XL'].interpolate(method='time', inplace=True)
+        df['YL'].interpolate(method='time', inplace=True)
+        df['ZL'].interpolate(method='time', inplace=True)
+
     # interpolation of missing lat & lon velocity values via padding on the reversed df
     df.sort_index(axis=0, ascending=False, inplace=True)
     df['lat'].interpolate(method='pad', inplace=True)
@@ -290,7 +302,7 @@ def equidistant_interpolate(time_interval, file):
     df.to_csv(file, ',', index=False)
 
 
-def interpolate(dir, region='Berlin', time_interval=100, interpolation_type='equidistant', pbar=None):
+def interpolate(dir, region='Berlin', time_interval=100, interpolation_type='equidistant', lin_acc_flag=False, pbar=None):
     for split in ['train', 'test', 'val']:
 
         file_list = glob.glob(os.path.join(dir, split, region, 'VM2_*.csv'))
@@ -298,10 +310,10 @@ def interpolate(dir, region='Berlin', time_interval=100, interpolation_type='equ
         with mp.Pool(mp.cpu_count()) as pool:
 
             if interpolation_type == 'linear':
-                pool.map(linear_interpolate, file_list)
+                pool.map(partial(linear_interpolate, lin_acc_flag), file_list)
 
             elif interpolation_type == 'equidistant':
-                pool.map(partial(equidistant_interpolate, time_interval), file_list)
+                pool.map(partial(equidistant_interpolate, time_interval, lin_acc_flag), file_list)
 
             else:
                 print('interpolation_type is incorrect')
@@ -344,8 +356,8 @@ def remove_vel_outliers(dir, region='Berlin', pbar=None):
 
     arr = np.concatenate(l, axis=0)
 
-    # print('data max: {}'.format(np.max(arr, axis=0)))
-    # print('data min: {}'.format(np.min(arr, axis=0)))
+    # print('lat lon data max: {}'.format(np.max(arr, axis=0)))
+    # print('lat lon data min: {}'.format(np.min(arr, axis=0)))
 
     # arr = arr[:, :]
     q25 = np.percentile(arr, 25, axis=0)
@@ -383,16 +395,21 @@ def remove_empty_rows(dir, region='Berlin', pbar=None):
     pbar.update(1) if pbar is not None else print()
 
 
-def scale_inner(scaler_maxabs, file):
+def scale_inner(scaler_maxabs, lin_acc_flag, file):
     df = pd.read_csv(file)
-    df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c']] = scaler_maxabs.transform(
-        df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c']])
+    if lin_acc_flag:
+        df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c','XL','YL','ZL']] = scaler_maxabs.transform(
+            df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c','XL','YL','ZL']])
+        # change order of features and remove timestamp column
+        df[['X', 'Y', 'Z', 'a', 'b', 'c', 'XL', 'YL', 'ZL', 'lat', 'lon', 'incident']].to_csv(file, ',', index=False)
+    else:
+        df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c']] = scaler_maxabs.transform(
+            df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c']])
+        # change order of features and remove timestamp column
+        df[['X', 'Y', 'Z', 'a', 'b', 'c', 'lat', 'lon', 'incident']].to_csv(file, ',', index=False)
 
-    # change order of features and remove timestamp column
-    df[['X', 'Y', 'Z', 'a', 'b', 'c', 'lat', 'lon', 'incident']].to_csv(file, ',', index=False)
 
-
-def scale(dir, region='Berlin', pbar=None):
+def scale(dir, region='Berlin', lin_acc_flag=False, pbar=None):
     scaler_maxabs = MaxAbsScaler()
 
     split = 'train'
@@ -408,15 +425,18 @@ def scale(dir, region='Berlin', pbar=None):
 
             df.fillna(0, inplace=True)
 
-            scaler_maxabs.partial_fit(df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c']])
-
+            if lin_acc_flag:
+                scaler_maxabs.partial_fit(df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c', 'XL', 'YL', 'ZL']])
+            else:
+                scaler_maxabs.partial_fit(df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c']])
+        print(scaler_maxabs.max_abs_)
         joblib.dump(scaler_maxabs, os.path.join(dir, 'scaler.save'))
 
     for split in ['train', 'test', 'val']:
         file_list = glob.glob(os.path.join(dir, split, region, 'VM2_*.csv'))
 
         with mp.Pool(mp.cpu_count()) as pool:
-            pool.map(partial(scale_inner, scaler_maxabs), file_list)
+            pool.map(partial(scale_inner, scaler_maxabs, lin_acc_flag), file_list)
 
     pbar.update(1) if pbar is not None else print()
 
@@ -723,7 +743,7 @@ def fourier_transform(dir, region='Berlin', in_memory_flag=True, fourier_transfo
     pbar.update(1) if pbar is not None else print()
 
 
-def preprocess(dir, region='Berlin', time_interval=100, interpolation_type='equidistant',
+def preprocess(dir, region='Berlin', time_interval=100, interpolation_type='equidistant', lin_acc_flag=False,
                in_memory_flag=True, window_size=5, slices=20, fourier_transform_flag=False, rotation_flag=False,
                gan_flag=False, num_epochs=1000, batch_size=128, latent_dim=100, input_shape=(None, 5, 20, 8),
                class_counts_file='class_counts.csv', gan_checkpoint_dir='./gan_checkpoints'):
@@ -731,14 +751,14 @@ def preprocess(dir, region='Berlin', time_interval=100, interpolation_type='equi
     with tqdm(total=12, desc='preprocess') as pbar:
         sort_timestamps(dir=dir, region=region, pbar=pbar)
         remove_invalid_rides(dir=dir, region=region, pbar=pbar)
-        remove_sensor_values_from_gps_timestamps(dir=dir, region=region, pbar=pbar)
+        remove_sensor_values_from_gps_timestamps(dir=dir, region=region, lin_acc_flag=lin_acc_flag, pbar=pbar)
         remove_acc_outliers(dir=dir, region=region, pbar=pbar)
         calc_vel_delta(dir=dir, region=region, pbar=pbar)
         interpolate(dir=dir, region=region, time_interval=time_interval, interpolation_type=interpolation_type,
-                    pbar=pbar)
+                    lin_acc_flag=lin_acc_flag, pbar=pbar)
         remove_vel_outliers(dir=dir, region=region, pbar=pbar)
         remove_empty_rows(dir=dir, region=region, pbar=pbar)
-        scale(dir=dir, region=region, pbar=pbar)
+        scale(dir=dir, region=region, lin_acc_flag=lin_acc_flag, pbar=pbar)
         create_buckets(dir=dir, region=region, in_memory_flag=in_memory_flag, window_size=window_size,
                        slices=slices, class_counts_file=class_counts_file, pbar=pbar)
 
@@ -757,6 +777,7 @@ if __name__ == '__main__':
     interpolation_type = 'equidistant'
     window_size = 5
     slices = 20
+    lin_acc_flag = False
     in_memory_flag = True
     fourier_transform_flag = True
     rotation_flag = False
@@ -764,10 +785,10 @@ if __name__ == '__main__':
     num_epochs = 1000
     batch_size = 128
     latent_dim = 100
-    input_shape = (None, window_size, slices, 8)
+    input_shape = (None, window_size, slices, 8 + 3 * lin_acc_flag)
     class_counts_file = 'class_counts.csv'
     gan_checkpoint_dir = 'gan_checkpoints'
-    preprocess(dir=dir, region=region, time_interval=time_interval, interpolation_type=interpolation_type, in_memory_flag=in_memory_flag,
-               window_size=window_size, slices=slices, fourier_transform_flag=fourier_transform_flag, rotation_flag=rotation_flag,
-               gan_flag=gan_flag, num_epochs=num_epochs, batch_size=batch_size, latent_dim=latent_dim, input_shape=input_shape,
-               class_counts_file=class_counts_file, gan_checkpoint_dir=gan_checkpoint_dir)
+    preprocess(dir=dir, region=region, time_interval=time_interval, interpolation_type=interpolation_type, lin_acc_flag=lin_acc_flag,
+               in_memory_flag=in_memory_flag, window_size=window_size, slices=slices, fourier_transform_flag=fourier_transform_flag,
+               rotation_flag=rotation_flag, gan_flag=gan_flag, num_epochs=num_epochs, batch_size=batch_size, latent_dim=latent_dim,
+               input_shape=input_shape, class_counts_file=class_counts_file, gan_checkpoint_dir=gan_checkpoint_dir)
