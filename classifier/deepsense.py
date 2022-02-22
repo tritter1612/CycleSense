@@ -429,12 +429,6 @@ def train_submodels(train_ds, val_ds, test_ds, class_weight, num_epochs=10, pati
     initial_bias = np.log(class_weight[0] / class_weight[1])
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
     loss = tf.keras.losses.BinaryCrossentropy(from_logits=False),
-    metrics = ['accuracy',
-               tf.keras.metrics.TrueNegatives(name='tn'),
-               tf.keras.metrics.FalsePositives(name='fp'),
-               tf.keras.metrics.FalseNegatives(name='fn'),
-               tf.keras.metrics.TruePositives(name='tp'),
-               tf.keras.metrics.AUC(curve='roc', from_logits=False, name='aucroc')]
 
     # Create a callback for early stopping
     es_callback = tf.keras.callbacks.EarlyStopping(
@@ -450,9 +444,14 @@ def train_submodels(train_ds, val_ds, test_ds, class_weight, num_epochs=10, pati
                                       (submodel_gyro_imag(input_shape, initial_bias), ckpt_deepsense_gyro_imag),
                                       (submodel_gps(input_shape, initial_bias), ckpt_deepsense_gps)]:
 
-        model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+        metrics = ['accuracy',
+                   tf.keras.metrics.TrueNegatives(name='tn'),
+                   tf.keras.metrics.FalsePositives(name='fp'),
+                   tf.keras.metrics.FalseNegatives(name='fn'),
+                   tf.keras.metrics.TruePositives(name='tp'),
+                   tf.keras.metrics.AUC(curve='roc', from_logits=False, name='aucroc')]
 
-        print(ckpt_deepsense_sub)
+        model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
         try:
             model.load_weights(tf.train.latest_checkpoint(os.path.dirname(ckpt_deepsense_sub)))
@@ -588,8 +587,7 @@ if __name__ == '__main__':
 
     train_deepsense(train_ds, val_ds, test_ds, class_weight, num_epochs=num_epochs, patience=patience,
                     input_shape=input_shape, stacking=stacking, freeze=freeze,
-                    ckpt_deepsense=ckpt_deepsense,
-                    ckpt_deepsense_acc=ckpt_deepsense_acc, ckpt_deepsense_acc_imag=ckpt_deepsense_acc_imag,
-                    ckpt_deepsense_gyro=ckpt_deepsense_gyro, ckpt_deepsense_gyro_imag=ckpt_deepsense_gyro_imag,
-                    ckpt_deepsense_gps=ckpt_deepsense_gps
+                    ckpt_deepsense=ckpt_deepsense, ckpt_deepsense_acc=ckpt_deepsense_acc,
+                    ckpt_deepsense_acc_imag=ckpt_deepsense_acc_imag, ckpt_deepsense_gyro=ckpt_deepsense_gyro,
+                    ckpt_deepsense_gyro_imag=ckpt_deepsense_gyro_imag, ckpt_deepsense_gps=ckpt_deepsense_gps
                     )

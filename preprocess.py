@@ -483,8 +483,14 @@ def create_buckets(dir, region='Berlin', in_memory_flag=True, window_size=5, sli
                 else:
                     for i, bucket in enumerate(arr):
                         bucket[:, :, -1] = labels[i]
-                        dict_name = os.path.basename(file).replace('.csv', '') + \
-                                    '_no' + str(i).zfill(5) + '_bucket_incident'
+
+                        if labels[i]:
+                            dict_name = os.path.basename(file).replace('.csv', '') + \
+                                        '_no' + str(i).zfill(5) + '_bucket_incident'
+                        else:
+                            dict_name = os.path.basename(file).replace('.csv', '') + \
+                                        '_no' + str(i).zfill(5) + '_bucket'
+
                         buckets_dict.update({dict_name: bucket})
 
             except:
