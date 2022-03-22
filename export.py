@@ -1,5 +1,6 @@
 import os
 import glob
+import sys
 from io import StringIO
 import numpy as np
 import pandas as pd
@@ -7,9 +8,11 @@ from tqdm.auto import tqdm
 from fnmatch import fnmatch
 import multiprocessing as mp
 from functools import partial
+import warnings
+import argparse as arg
 
 
-def export_file(target_dir, region, split, lin_acc_flag, file):
+def export_file(target_dir, region, split, lin_acc_flag, verbose, file):
 
     file = file[0]
 
@@ -36,7 +39,8 @@ def export_file(target_dir, region, split, lin_acc_flag, file):
             incident_info_list = []
 
             if len(ride_info_lines) < 5:
-                print('file {} has the wrong format'.format(file))
+                if verbose < 2:
+                    print('file {} has the wrong format'.format(file))
                 return
 
             start = int(ride_info_lines[3].split(',')[5])
@@ -58,7 +62,8 @@ def export_file(target_dir, region, split, lin_acc_flag, file):
                         incident_info_tuple = [incident_key, incident_lat, incident_lon, incident_ts, incident]
 
                         if incident_ts != '' and incident_ts != '1337' and (int(incident_ts) < int(start) or int(incident_ts) > int(end)):
-                            print('WARNING: Incident with timestamp ' + incident_ts + ' does not occur during ride ' + file)
+                            if verbose < 3:
+                                warnings.warn('WARNING: Incident with timestamp ' + incident_ts + ' does not occur during ride ' + file)
                             return
 
                         found = False
@@ -154,24 +159,28 @@ def export_file(target_dir, region, split, lin_acc_flag, file):
             # check if all incidents could be assigned properly, if not remove ride
             for t in incident_info_list:
                 if int(t[4]) != -5:
-                    print('WARNING: Incident with timestamp ' + t[3] + ' not assigned to a ride_info_line in file ' + file)
+                    if verbose < 3:
+                        warnings.warn('WARNING: Incident with timestamp ' + t[3] + ' not assigned to a ride_info_line in file ' + file)
                     return
 
             try:
                 arr = np.stack(arr_list)
 
             except:
-                print('file {} has the wrong format'.format(file))
+                if verbose < 2:
+                    print('file {} has the wrong format'.format(file))
                 return
 
             # if a, b, c are all 0.0
             if np.all(arr[:,7:10] == 0.0):
-                print('file {} has the wrong format, abc are all 0.0'.format(file))
+                if verbose < 2:
+                    print('file {} has the wrong format, abc are all 0.0'.format(file))
                 return
 
             if (system == 'a') and lin_acc_flag:
                 if np.all(arr[:,10:13] == 0.0):
-                    print('file {} has the wrong format, linear accelerometer are all 0.0'.format(file))
+                    if verbose < 2:
+                        print('file {} has the wrong format, linear accelerometer are all 0.0'.format(file))
                     return
 
             s = header + ',' + 'incident'
@@ -192,19 +201,15 @@ def export_file(target_dir, region, split, lin_acc_flag, file):
             df.to_csv(os.path.join(target_dir, split, region, os.path.basename(file) + system + '.csv'), ',', index=False)
 
 
-def export(data_dir, target_dir, target_region=None, lin_acc_flag=False):
-    for subdir in tqdm(glob.glob(os.path.join(data_dir, '[!.]*'))):
-        region = os.path.basename(subdir)
-
-        if target_region is not None and target_region != region:
-            continue
+def export(source_dir, target_dir, region=None, lin_acc_flag=False, verbose=3):
+    for subdir in tqdm(glob.glob(os.path.join(source_dir, region, 'Rides', '[!.]*')), desc='preprocess ride data'):
 
         file_list = []
         file_names = set()
 
-        root = os.path.join(data_dir, region, 'Rides')
+        root = os.path.join(source_dir, region, 'Rides')
 
-        for path, sd, files in os.walk(root):
+        for path, sd, files in os.walk(subdir):
             for name in files:
                 if fnmatch(name, 'VM2_*'):
 
@@ -217,20 +222,29 @@ def export(data_dir, target_dir, target_region=None, lin_acc_flag=False):
         train, val, test = np.split(df.sample(frac=1, random_state=42), [int(.6 * len(df)), int(.8 * len(df))])
 
         with mp.Pool(mp.cpu_count()) as pool:
-            pool.map(partial(export_file, target_dir, target_region, 'train', lin_acc_flag), train.values)
-            pool.map(partial(export_file, target_dir, target_region, 'val', lin_acc_flag), val.values)
-            pool.map(partial(export_file, target_dir, target_region, 'test', lin_acc_flag), test.values)
+            pool.map(partial(export_file, target_dir, region, 'train', lin_acc_flag, verbose), train.values)
+            pool.map(partial(export_file, target_dir, region, 'val', lin_acc_flag, verbose), val.values)
+            pool.map(partial(export_file, target_dir, region, 'test', lin_acc_flag, verbose), test.values)
 
     for split in ['train', 'test', 'val']:
         count = 0
-        for subdir in tqdm(glob.glob(os.path.join(target_dir, split, '[!.]*')), desc='count rides in {} data'.format(split)):
+        for subdir in glob.glob(os.path.join(target_dir, split, '[!.]*')):
             count += len(glob.glob(os.path.join(subdir, 'VM2_*.csv')))
-        print('number of rides in {}: {}'.format(split, count))
+        if verbose < 2:
+            print('number of rides in {}: {}'.format(split, count))
+
+
+def main(argv):
+    parser = arg.ArgumentParser(description='export')
+    parser.add_argument('source_dir', metavar='<source_directory>', type=str, help='path to the source directory')
+    parser.add_argument('target_dir', metavar='<target_directory>', type=str, help='path to the target directory')
+    parser.add_argument('--region', metavar='<region>', type=str, help='target region', required=False, default='Berlin')
+    parser.add_argument('--lin_acc_flag', metavar='<bool>', type=bool, help='whether the linear accelerometer data should be exported, too', required=False, default=False)
+    parser.add_argument('--verbose', metavar='<number>', type=int, help='verbosity', required=False, default=3)
+    args = parser.parse_args()
+
+    export(source_dir=args.source_dir, target_dir=args.target_dir, region=args.region, lin_acc_flag=args.lin_acc_flag, verbose=args.verbose)
 
 
 if __name__ == '__main__':
-    data_dir = '../Regions/'
-    target_dir = '../Ride_Data/'
-    target_region = 'Berlin'
-    lin_acc_flag = False
-    export(data_dir, target_dir, target_region, lin_acc_flag)
+    main(sys.argv[1:])
