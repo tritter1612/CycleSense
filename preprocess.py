@@ -4,13 +4,16 @@ import glob
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-tf.get_logger().setLevel(logging.ERROR)
 import datetime as dt
 import multiprocessing as mp
 from tqdm.auto import tqdm
 from sklearn.preprocessing import MaxAbsScaler
 from functools import partial
 import joblib
+import sys
+import warnings
+import argparse as arg
+tf.get_logger().setLevel(logging.ERROR)
 
 from data_loader import create_ds, set_input_shape_global
 from gan import init_gan, train_gan
@@ -233,9 +236,8 @@ def equidistant_interpolate(time_interval, lin_acc_flag, file):
     removables = list(set(timestamps_original) - set(timestamps_new))
     removables = [dt.datetime.utcfromtimestamp(x / 1000) for x in removables]
 
-    df_net_new = pd.concat(
-        [pd.DataFrame([timestamp_net_new], columns=['timeStamp']) for timestamp_net_new in
-         timestamps_net_new], ignore_index=True)
+    df_net_new = pd.DataFrame(timestamps_net_new, columns=['timeStamp'])
+
     df = pd.concat([df, df_net_new])
 
     # convert timestamp to datetime format
@@ -252,6 +254,8 @@ def equidistant_interpolate(time_interval, lin_acc_flag, file):
     # note that the net new timestamp rows are after the original rows
     df = df[~df.index.duplicated(keep='first')]
 
+    df.sort_index(axis=0, ascending=True, inplace=True)
+
     # interpolation of X, Y, Z, a, b, c via linear interpolation based on timestamp
     df['X'].interpolate(method='time', inplace=True)
     df['Y'].interpolate(method='time', inplace=True)
@@ -265,12 +269,9 @@ def equidistant_interpolate(time_interval, lin_acc_flag, file):
         df['YL'].interpolate(method='time', inplace=True)
         df['ZL'].interpolate(method='time', inplace=True)
 
-    # interpolation of missing lat & lon velocity values via padding on the reversed df
-    df.sort_index(axis=0, ascending=False, inplace=True)
-    df['lat'].interpolate(method='pad', inplace=True)
-    df['lon'].interpolate(method='pad', inplace=True)
-
-    df.sort_index(axis=0, ascending=True, inplace=True)
+    # interpolation of missing lat & lon via backfill
+    df['lat'].fillna(method='bfill', inplace=True)
+    df['lon'].fillna(method='bfill', inplace=True)
 
     incident_list = df.loc[df['incident'] > 0]
 
@@ -316,7 +317,7 @@ def interpolate(dir, region='Berlin', time_interval=100, interpolation_type='equ
                 pool.map(partial(equidistant_interpolate, time_interval, lin_acc_flag), file_list)
 
             else:
-                print('interpolation_type is incorrect')
+                warnings.warn('interpolation_type is incorrect')
                 return
 
     pbar.update(1) if pbar is not None else print()
@@ -339,7 +340,7 @@ def remove_vel_outliers_inner(lower, upper, file):
         df.to_csv(file, ',', index=False)
 
 
-def remove_vel_outliers(dir, region='Berlin', pbar=None):
+def remove_vel_outliers(dir, region='Berlin', verbose=3, pbar=None):
     l = []
 
     for file in glob.glob(os.path.join(dir, 'train', region, 'VM2_*.csv')):
@@ -356,8 +357,9 @@ def remove_vel_outliers(dir, region='Berlin', pbar=None):
 
     arr = np.concatenate(l, axis=0)
 
-    # print('lat lon data max: {}'.format(np.max(arr, axis=0)))
-    # print('lat lon data min: {}'.format(np.min(arr, axis=0)))
+    if verbose < 2:
+        print('lat lon data max: {}'.format(np.max(arr, axis=0)))
+        print('lat lon data min: {}'.format(np.min(arr, axis=0)))
 
     # arr = arr[:, :]
     q25 = np.percentile(arr, 25, axis=0)
@@ -409,7 +411,7 @@ def scale_inner(scaler_maxabs, lin_acc_flag, file):
         df[['X', 'Y', 'Z', 'a', 'b', 'c', 'lat', 'lon', 'incident']].to_csv(file, ',', index=False)
 
 
-def scale(dir, region='Berlin', lin_acc_flag=False, pbar=None):
+def scale(dir, region='Berlin', lin_acc_flag=False, verbose=3, pbar=None):
     scaler_maxabs = MaxAbsScaler()
 
     split = 'train'
@@ -429,7 +431,8 @@ def scale(dir, region='Berlin', lin_acc_flag=False, pbar=None):
                 scaler_maxabs.partial_fit(df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c', 'XL', 'YL', 'ZL']])
             else:
                 scaler_maxabs.partial_fit(df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c']])
-        print(scaler_maxabs.max_abs_)
+        if verbose < 2:
+            print(scaler_maxabs.max_abs_)
         joblib.dump(scaler_maxabs, os.path.join(dir, 'scaler.save'))
 
     for split in ['train', 'test', 'val']:
@@ -460,7 +463,7 @@ def create_buckets(dir, region='Berlin', in_memory_flag=True, window_size=5, sli
             try:
                 arr = arr[60:-60, :]
             except:
-                print('not enough data points to remove')
+                raise ValueError('not enough data points to remove')
 
             try:
 
@@ -494,7 +497,7 @@ def create_buckets(dir, region='Berlin', in_memory_flag=True, window_size=5, sli
                         buckets_dict.update({dict_name: bucket})
 
             except:
-                print(file)
+                raise ValueError('file')
 
             os.remove(file)
 
@@ -577,7 +580,7 @@ def augment_data_inner(dir, region, rotation_flag, files):
 
 
 def augment_data(dir, region='Berlin', in_memory_flag=True, rotation_flag=False, gan_flag=False, num_epochs=1000,
-                 batch_size=128, latent_dim=100, input_shape=(None, 5, 20, 8), class_counts_file='class_counts.csv', gan_checkpoint_dir='gan_checkpoints', pbar=None):
+                 batch_size=128, latent_dim=100, input_shape=(None, 5, 20, 8), class_counts_file='class_counts.csv', gan_checkpoint_dir='gan_checkpoints', verbose=3, pbar=None):
 
     if rotation_flag or gan_flag:
 
@@ -616,9 +619,11 @@ def augment_data(dir, region='Berlin', in_memory_flag=True, rotation_flag=False,
 
                 try:
                     generator.load_weights(os.path.join(gan_checkpoint_dir, 'generator'))
-                    print('weights have been loaded from {}'.format(gan_checkpoint_dir))
+                    if verbose < 3:
+                        print('weights have been loaded from {}'.format(gan_checkpoint_dir))
                 except:
-                    print('train new gan model')
+                    if verbose < 3:
+                        print('train new gan model')
                     generator, discriminator = train_gan(ds, num_epochs)
 
                 factor = 0.1
@@ -657,9 +662,11 @@ def augment_data(dir, region='Berlin', in_memory_flag=True, rotation_flag=False,
 
                 try:
                     generator.load_weights(os.path.join(gan_checkpoint_dir, 'generator'))
-                    print('weights have been loaded from {}'.format(gan_checkpoint_dir))
+                    if verbose < 3:
+                        print('weights have been loaded from {}'.format(gan_checkpoint_dir))
                 except:
-                    print('train new gan model')
+                    if verbose < 3:
+                        print('train new gan model')
                     generator, discriminator = train_gan(ds, num_epochs)
 
                 factor = 0.1
@@ -749,10 +756,10 @@ def fourier_transform(dir, region='Berlin', in_memory_flag=True, fourier_transfo
     pbar.update(1) if pbar is not None else print()
 
 
-def preprocess(dir, region='Berlin', time_interval=100, interpolation_type='equidistant', lin_acc_flag=False,
-               in_memory_flag=True, window_size=5, slices=20, fourier_transform_flag=False, rotation_flag=False,
-               gan_flag=False, num_epochs=1000, batch_size=128, latent_dim=100, input_shape=(None, 5, 20, 8),
-               class_counts_file='class_counts.csv', gan_checkpoint_dir='./gan_checkpoints'):
+def preprocess(dir, region='Berlin', interpolation_type='equidistant', time_interval=100, window_size=5, slices=20,
+               lin_acc_flag=False, in_memory_flag=True, fourier_transform_flag=True, rotation_flag=False,
+               gan_flag=True, num_epochs=1000, batch_size=128, latent_dim=100, input_shape=(None, 5, 20, 8),
+               class_counts_file='class_counts.csv', gan_checkpoint_dir='./gan_checkpoints', verbose=3):
 
     with tqdm(total=12, desc='preprocess') as pbar:
         sort_timestamps(dir=dir, region=region, pbar=pbar)
@@ -762,39 +769,47 @@ def preprocess(dir, region='Berlin', time_interval=100, interpolation_type='equi
         calc_vel_delta(dir=dir, region=region, pbar=pbar)
         interpolate(dir=dir, region=region, time_interval=time_interval, interpolation_type=interpolation_type,
                     lin_acc_flag=lin_acc_flag, pbar=pbar)
-        remove_vel_outliers(dir=dir, region=region, pbar=pbar)
+        remove_vel_outliers(dir=dir, region=region, verbose=verbose, pbar=pbar)
         remove_empty_rows(dir=dir, region=region, pbar=pbar)
-        scale(dir=dir, region=region, lin_acc_flag=lin_acc_flag, pbar=pbar)
+        scale(dir=dir, region=region, lin_acc_flag=lin_acc_flag, verbose=verbose, pbar=pbar)
         create_buckets(dir=dir, region=region, in_memory_flag=in_memory_flag, window_size=window_size,
                        slices=slices, class_counts_file=class_counts_file, pbar=pbar)
 
         augment_data(dir=dir, region=region, in_memory_flag=in_memory_flag, rotation_flag=rotation_flag, gan_flag=gan_flag, num_epochs=num_epochs,
                      batch_size=batch_size, latent_dim=latent_dim, input_shape=input_shape, class_counts_file=class_counts_file,
-                     gan_checkpoint_dir=gan_checkpoint_dir, pbar=pbar)
+                     gan_checkpoint_dir=gan_checkpoint_dir, verbose=verbose, pbar=pbar)
 
         fourier_transform(dir=dir, region=region, in_memory_flag=in_memory_flag, fourier_transform_flag=fourier_transform_flag,
                           window_size=window_size, slices=slices, pbar=pbar)
 
 
+def main(argv):
+    parser = arg.ArgumentParser(description='preprocess')
+    parser.add_argument('dir', metavar='<directory>', type=str, help='path to the data directory')
+    parser.add_argument('--region', metavar='<region>', type=str, help='target region', required=False, default='Berlin')
+    parser.add_argument('--interpolation_type', metavar='<interpolation_type>', type=str, help='whether to use linear or equidistant interpolation', required=False, default='equidistant')
+    parser.add_argument('--time_interval', metavar='<int>', type=int, help='interval between time stamps in ms', required=False, default=100)
+    parser.add_argument('--window_size', metavar='<int>', type=int, help='bucket height', required=False, default=5)
+    parser.add_argument('--slices', metavar='<int>', type=int, help='bucket width', required=False, default=20)
+    parser.add_argument('--lin_acc_flag', metavar='<bool>', type=bool, help='whether the linear accelerometer data was exported, too', required=False, default=False)
+    parser.add_argument('--in_memory_flag', metavar='<bool>', type=bool, help='whether to store the dataset in one arrray or not', required=False, default=True)
+    parser.add_argument('--fourier_transform_flag', metavar='<bool>', type=bool, help='whether to apply fourier transform or not', required=False, default=True)
+    parser.add_argument('--rotation_flag', metavar='<bool>', type=bool, help='whether to use rotation for data augmentation', required=False, default=False)
+    parser.add_argument('--gan_flag', metavar='<bool>', type=bool, help='whether to use a GAN for data augmentation', required=False, default=True)
+    parser.add_argument('--num_epochs', metavar='<int>', type=int, help='training epochs GAN', required=False, default=1000)
+    parser.add_argument('--batch_size', metavar='<int>', type=int, help='batch size GAN training', required=False, default=128)
+    parser.add_argument('--latent_dim', metavar='<int>', type=int, help='noise input dimensionality GAN', required=False, default=100)
+    parser.add_argument('--class_counts_file', metavar='<file>', type=str, help='path to class counts file', required=False, default='class_counts.csv')
+    parser.add_argument('--gan_checkpoint_dir', metavar='<directory>', type=str, help='path to gan checkpoint directory', required=False, default='gan_checkpoints')
+    parser.add_argument('--verbose', metavar='<number>', type=int, help='verbosity', required=False, default=3)
+    args = parser.parse_args()
+
+    input_shape = (None, args.window_size, args.slices, 8 + 3 * args.lin_acc_flag)
+    preprocess(dir=args.dir, region=args.region, interpolation_type=args.interpolation_type, time_interval=args.time_interval, window_size=args.window_size,
+               slices=args.slices, lin_acc_flag=args.lin_acc_flag, in_memory_flag=args.in_memory_flag, fourier_transform_flag=args.fourier_transform_flag,
+               rotation_flag=args.rotation_flag, gan_flag=args.gan_flag, num_epochs=args.num_epochs, batch_size=args.batch_size, latent_dim=args.latent_dim,
+               input_shape=input_shape, class_counts_file=args.class_counts_file, gan_checkpoint_dir=args.gan_checkpoint_dir, verbose=args.verbose)
+
+
 if __name__ == '__main__':
-    dir = '../Ride_Data'
-    region = 'Berlin'
-    time_interval = 100
-    interpolation_type = 'equidistant'
-    window_size = 5
-    slices = 20
-    lin_acc_flag = False
-    in_memory_flag = True
-    fourier_transform_flag = True
-    rotation_flag = False
-    gan_flag = True
-    num_epochs = 1000
-    batch_size = 128
-    latent_dim = 100
-    input_shape = (None, window_size, slices, 8 + 3 * lin_acc_flag)
-    class_counts_file = 'class_counts.csv'
-    gan_checkpoint_dir = 'gan_checkpoints'
-    preprocess(dir=dir, region=region, time_interval=time_interval, interpolation_type=interpolation_type, lin_acc_flag=lin_acc_flag,
-               in_memory_flag=in_memory_flag, window_size=window_size, slices=slices, fourier_transform_flag=fourier_transform_flag,
-               rotation_flag=rotation_flag, gan_flag=gan_flag, num_epochs=num_epochs, batch_size=batch_size, latent_dim=latent_dim,
-               input_shape=input_shape, class_counts_file=class_counts_file, gan_checkpoint_dir=gan_checkpoint_dir)
+    main(sys.argv[1:])
