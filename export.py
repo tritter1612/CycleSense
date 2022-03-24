@@ -13,6 +13,14 @@ import argparse as arg
 
 
 def export_file(target_dir, region, split, lin_acc_flag, verbose, file):
+    '''
+    Inner method to parallelize file export.
+    @param target_dir: path to the target directory
+    @param region: region that should be exported
+    @param lin_acc_flag: whether or not the linear accelerometer data should be exported, too
+    @param verbose: level of information displayed
+    @param file: file to export
+    '''
 
     file = file[0]
 
@@ -202,6 +210,15 @@ def export_file(target_dir, region, split, lin_acc_flag, verbose, file):
 
 
 def export(source_dir, target_dir, region=None, lin_acc_flag=False, verbose=3):
+    '''
+    Export the ride files from the SimRa dataset format into specific .csv file format required for preprocessing and model training.
+    The new files are saved in a separate directory, the target directory.
+    @param source_dir: path to the source directory with the SimRa ride files
+    @param target_dir: path to the target directory
+    @param region: region that should be exported
+    @param lin_acc_flag: whether or not the linear accelerometer data should be exported, too
+    @param verbose: level of information displayed
+    '''
     for subdir in tqdm(glob.glob(os.path.join(source_dir, region, 'Rides', '[!.]*')), desc='preprocess ride data'):
 
         file_list = []
