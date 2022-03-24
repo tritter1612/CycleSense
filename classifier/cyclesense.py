@@ -1,5 +1,6 @@
 import os
 import sys
+import argparse as arg
 import logging
 import numpy as np
 from datetime import datetime
@@ -8,11 +9,11 @@ from tensorflow.keras import Model
 from tensorflow.keras.layers import Dense, Flatten, Conv3D, RNN, GRUCell, StackedRNNCells, Reshape, BatchNormalization, \
     ReLU, Dropout, add, Input
 from sklearn.metrics import confusion_matrix
-import argparse as arg
-tf.get_logger().setLevel(logging.ERROR)
 
 from data_loader import load_data
 from metrics import TSS
+
+tf.get_logger().setLevel(logging.ERROR)
 
 
 def submodel_acc(input_shape=(None, 5, 20, 14), output_bias=None):
@@ -672,10 +673,8 @@ def train_submodels(train_ds, val_ds, test_ds, class_weight, num_epochs=10, pati
         tb_logdir = 'tb_logs/fit/' + datetime.now().strftime('%Y%m%d-%H%M%S')
         tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=tb_logdir, histogram_freq=1)
 
-        # model.fit(train_ds, validation_data=val_ds, epochs=num_epochs, callbacks=[cp_callback, es_callback, tensorboard_callback],
-        #           class_weight=class_weight)
-
-        model.evaluate(test_ds)
+        model.fit(train_ds, validation_data=val_ds, epochs=num_epochs, callbacks=[cp_callback, es_callback, tensorboard_callback],
+                  class_weight=class_weight)
 
 
 def train_cyclesense(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1, input_shape=(None, 5, 20, 14),
@@ -759,7 +758,7 @@ def train_cyclesense(train_ds, val_ds, test_ds, class_weight, num_epochs=10, pat
 
 
 def main(argv):
-    parser = arg.ArgumentParser(description='preprocess')
+    parser = arg.ArgumentParser(description='cyclesense')
     parser.add_argument('dir', metavar='<directory>', type=str, help='path to the data directory')
     parser.add_argument('--region', metavar='<region>', type=str, help='target region', required=False, default='Berlin')
     parser.add_argument('--ckpt_cyclesense', metavar='<directory>', type=str, help='checkpoint path cyclesense model', required=False, default='checkpoints/cyclesense/training')
@@ -778,17 +777,16 @@ def main(argv):
     parser.add_argument('--lin_acc_flag', metavar='<bool>', type=bool, help='whether the linear accelerometer data was exported, too', required=False, default=False)
     parser.add_argument('--in_memory_flag', metavar='<bool>', type=bool, help='whether the data was stored in one array or not', required=False, default=True)
     parser.add_argument('--fourier_transform_flag', metavar='<bool>', type=bool, help='whether fourier transform was applied on the data', required=False, default=True)
-    parser.add_argument('--transpose_flag', metavar='<bool>', type=bool, help='transpose tensor for data_loader', required=False, default=False)
     parser.add_argument('--stacking', metavar='<bool>', type=bool, help='whether to train with stracking', required=False, default=True)
     parser.add_argument('--freeze', metavar='<bool>', type=bool, help='whether to freeze the submodel weights', required=False, default=True)
-    parser.add_argument('--class_counts_file', metavar='<file>', type=str, help='path to class counts file', required=False, default='class_counts.csv') # os.path.join(dir, 'class_counts.csv')
+    parser.add_argument('--class_counts_file', metavar='<file>', type=str, help='path to class counts file', required=False, default='class_counts.csv')
     parser.add_argument('--cache_dir', metavar='<directory>', type=str, help='path to cache directory', required=False, default=None)
     args = parser.parse_args()
 
     input_shape = (None, args.window_size, args.slices, 2 + 6 * (1 + args.fourier_transform_flag) + 3 * (1 + args.fourier_transform_flag) * args.lin_acc_flag)
 
     train_ds, val_ds, test_ds, class_weight = load_data(args.dir, args.region, input_shape=input_shape, batch_size=args.batch_size,
-                                                        in_memory_flag=args.in_memory_flag, transpose_flag=args.transpose_flag,
+                                                        in_memory_flag=args.in_memory_flag, transpose_flag=False,
                                                         class_counts_file=args.class_counts_file, cache_dir=args.cache_dir)
 
     train_submodels(train_ds, val_ds, test_ds, class_weight, num_epochs=args.num_epochs, patience=args.patience,

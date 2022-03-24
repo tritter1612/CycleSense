@@ -1,11 +1,13 @@
 import os
 import sys
-import numpy as np
+import argparse as arg
+import logging
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 import pandas as pd
 import tensorflow as tf
 from tensorflow.keras.layers import Dense, Flatten, Reshape, Input
 
+tf.get_logger().setLevel(logging.ERROR)
 
 class FCN(tf.keras.models.Sequential):
 
@@ -164,13 +166,22 @@ def train_classifier(train_ds, val_ds, test_ds, num_epochs=10, patience=1, check
     model.evaluate(test_ds)
 
 
-if __name__ == '__main__':
-    dir = 'Ride_Data'
-    checkpoint_dir = 'checkpoints/fcn/training'
-    batch_size = 2048
-    num_epochs = 100
-    patience = 10
+def main(argv):
+    parser = arg.ArgumentParser(description='fcn')
+    parser.add_argument('dir', metavar='<directory>', type=str, help='path to the data directory')
+    parser.add_argument('--checkpoint_dir', metavar='<directory>', type=str, help='checkpoint path model',
+                        required=False, default='checkpoints/fcn/training')
+    parser.add_argument('--batch_size', metavar='<int>', type=int, help='batch size', required=False, default=2048)
+    parser.add_argument('--num_epochs', metavar='<int>', type=int, help='training epochs', required=False,
+                        default=100)
+    parser.add_argument('--patience', metavar='<int>', type=int, help='patience value for early stopping',
+                        required=False, default=10)
+    args = parser.parse_args()
 
-    normalize(dir)
-    train_ds, val_ds, test_ds = load_data(dir, batch_size)
-    train_classifier(train_ds, val_ds, test_ds, num_epochs, patience, checkpoint_dir)
+    normalize(args.dir)
+    train_ds, val_ds, test_ds = load_data(args.dir, args.batch_size)
+    train_classifier(train_ds, val_ds, test_ds, args.num_epochs, args.patience, args.checkpoint_dir)
+
+
+if __name__ == '__main__':
+    main(sys.argv[1:])

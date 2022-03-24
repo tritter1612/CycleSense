@@ -1,14 +1,17 @@
 import os
+import sys
+import argparse as arg
 import logging
 import numpy as np
 from datetime import datetime
 import tensorflow as tf
 from tensorflow.keras.layers import Dense, Flatten, Conv1D, Dropout, TimeDistributed, LSTM
-tf.get_logger().setLevel(logging.ERROR)
 from sklearn.metrics import confusion_matrix
 
 from data_loader import load_data
 from metrics import TSS
+
+tf.get_logger().setLevel(logging.ERROR)
 
 
 class CNN_LSTM_(tf.keras.models.Sequential):
@@ -93,24 +96,37 @@ def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1,
     model.summary()
 
 
-if __name__ == '__main__':
-    dir = 'Ride_Data'
-    checkpoint_dir = 'checkpoints/cnnlstm/training'
-    region = 'Berlin'
-    bucket_size = 100
-    batch_size = 512
-    in_memory_flag = True
-    num_epochs = 100
-    patience = 10
-    deepsense_flag = True
-    window_size = 5
-    slices = 20
-    class_counts_file = os.path.join(dir, 'class_counts.csv')
-    input_shape = (None, slices, window_size, 8)
-    transpose_flag = True
-    cache_dir = None
+def main(argv):
+    parser = arg.ArgumentParser(description='cnnlstm')
+    parser.add_argument('dir', metavar='<directory>', type=str, help='path to the data directory')
+    parser.add_argument('--region', metavar='<region>', type=str, help='target region', required=False,
+                        default='Berlin')
+    parser.add_argument('--checkpoint_dir', metavar='<directory>', type=str, help='checkpoint path model',
+                        required=False, default='checkpoints/cnnlstm/training')
+    parser.add_argument('--batch_size', metavar='<int>', type=int, help='batch size', required=False, default=512)
+    parser.add_argument('--in_memory_flag', metavar='<bool>', type=bool,
+                        help='whether the data was stored in one array or not', required=False, default=True)
+    parser.add_argument('--num_epochs', metavar='<int>', type=int, help='training epochs', required=False,
+                        default=100)
+    parser.add_argument('--patience', metavar='<int>', type=int, help='patience value for early stopping',
+                        required=False, default=10)
+    parser.add_argument('--window_size', metavar='<int>', type=int, help='bucket height', required=False, default=5)
+    parser.add_argument('--slices', metavar='<int>', type=int, help='bucket width', required=False, default=20)
+    parser.add_argument('--class_counts_file', metavar='<file>', type=str, help='path to class counts file',
+                        required=False, default='class_counts.csv')
+    parser.add_argument('--cache_dir', metavar='<directory>', type=str, help='path to cache directory',
+                        required=False,
+                        default=None)
+    args = parser.parse_args()
 
-    train_ds, val_ds, test_ds, class_weight = load_data(dir, region, input_shape=input_shape, batch_size=batch_size,
-                                                        in_memory_flag=in_memory_flag, transpose_flag=transpose_flag,
-                                                        class_counts_file=class_counts_file, cache_dir=cache_dir)
-    train(train_ds, val_ds, test_ds, class_weight, num_epochs, patience, checkpoint_dir)
+    input_shape = (None, args.slices, args.window_size, 8)
+
+    train_ds, val_ds, test_ds, class_weight = load_data(args.dir, args.region, input_shape=input_shape, batch_size=args.batch_size,
+                                                        in_memory_flag=args.in_memory_flag, transpose_flag=True,
+                                                        class_counts_file=args.class_counts_file, cache_dir=args.cache_dir)
+    train(train_ds, val_ds, test_ds, class_weight, args.num_epochs, args.patience, args.checkpoint_dir)
+
+
+if __name__ == '__main__':
+    main(sys.argv[1:])
+

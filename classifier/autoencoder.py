@@ -1,11 +1,13 @@
 import os
 import sys
+import argparse as arg
 import logging
 import tensorflow as tf
 from tensorflow.keras.layers import Dense, Flatten, Reshape
-tf.get_logger().setLevel(logging.ERROR)
 
 from data_loader import load_data
+
+tf.get_logger().setLevel(logging.ERROR)
 
 
 def autoencoder():
@@ -149,29 +151,47 @@ def train_classifier(train_ds, val_ds, test_ds, class_weight={0: 0.5, 1: 0.5}, n
     model.evaluate(test_ds)
 
 
+def main(argv):
+    parser = arg.ArgumentParser(description='autoencoder')
+    parser.add_argument('dir', metavar='<directory>', type=str, help='path to the data directory')
+    parser.add_argument('--region', metavar='<region>', type=str, help='target region', required=False,
+                        default='Berlin')
+    parser.add_argument('--autoencoder_checkpoint_dir', metavar='<directory>', type=str,
+                        help='checkpoint path autoencoder',
+                        required=False, default='checkpoints/autoencoder/training')
+    parser.add_argument('--classifier_checkpoint_dir', metavar='<directory>', type=str,
+                        help='checkpoint path classifier',
+                        required=False, default='checkpoints/autoencoder_classifier/training')
+    parser.add_argument('--batch_size', metavar='<int>', type=int, help='batch size', required=False,
+                        default=sys.maxsize)
+    parser.add_argument('--in_memory_flag', metavar='<bool>', type=bool,
+                        help='whether the data was stored in one array or not', required=False, default=True)
+    parser.add_argument('--num_epochs', metavar='<int>', type=int, help='training epochs', required=False,
+                        default=100)
+    parser.add_argument('--patience', metavar='<int>', type=int, help='patience value for early stopping',
+                        required=False, default=10)
+    parser.add_argument('--window_size', metavar='<int>', type=int, help='bucket height', required=False, default=5)
+    parser.add_argument('--slices', metavar='<int>', type=int, help='bucket width', required=False, default=20)
+    parser.add_argument('--class_counts_file', metavar='<file>', type=str, help='path to class counts file',
+                        required=False, default='class_counts.csv')
+    parser.add_argument('--cache_dir', metavar='<directory>', type=str, help='path to cache directory',
+                        required=False,
+                        default=None)
+    args = parser.parse_args()
+
+    input_shape = (None, args.slices, args.window_size, 8)
+
+    train_ds, val_ds, test_ds, class_weight = load_data(args.dir, args.region, input_shape=input_shape,
+                                                        batch_size=args.batch_size,
+                                                        in_memory_flag=args.in_memory_flag, transpose_flag=True,
+                                                        class_counts_file=args.class_counts_file,
+                                                        cache_dir=args.cache_dir)
+
+    train_autoencoder(train_ds, val_ds, args.num_epochs, args.patience, args.autoencoder_checkpoint_dir)
+    train_classifier(train_ds, val_ds, test_ds, class_weight, args.num_epochs, args.patience,
+                     args.autoencoder_checkpoint_dir,
+                     args.classifier_checkpoint_dir)
+
+
 if __name__ == '__main__':
-    dir = 'Ride_Data'
-    autoencoder_checkpoint_dir = 'checkpoints/autoencoder/training'
-    classifier_checkpoint_dir = 'checkpoints/autoencoder_classifier/training'
-    target_region = 'Berlin'
-    bucket_size = 100
-    batch_size = sys.maxsize
-    in_memory_flag = True
-    num_epochs = 100
-    patience = 10
-    deepsense_flag = True
-    window_size = 5
-    slices = 20
-    class_counts_file = os.path.join(dir, 'class_counts.csv')
-    input_shape = (None, slices, window_size, 8)
-    transpose_flag = True
-    cache_dir = None
-
-    train_ds, val_ds, test_ds, class_weight = load_data(dir, target_region, input_shape=input_shape,
-                                                        batch_size=batch_size,
-                                                        in_memory_flag=in_memory_flag, transpose_flag=transpose_flag,
-                                                        class_counts_file=class_counts_file, cache_dir=cache_dir)
-
-    train_autoencoder(train_ds, val_ds, num_epochs, patience, autoencoder_checkpoint_dir)
-    train_classifier(train_ds, val_ds, test_ds, class_weight, num_epochs, patience, autoencoder_checkpoint_dir,
-                     classifier_checkpoint_dir)
+    main(sys.argv[1:])
