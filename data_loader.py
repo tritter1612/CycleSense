@@ -1,5 +1,4 @@
 import os
-import sys
 import logging
 import numpy as np
 import pandas as pd
@@ -17,7 +16,12 @@ def set_input_shape_global(input_shape):
 
 
 def pack_features_vector(features, labels):
-    """Pack the features into a single array."""
+    """
+    Pack the features into a single array.
+    @param features: x
+    @param labels: y
+    @return: tuple of features and labels
+    """
 
     features = tf.stack(list(features.values()), axis=1)
     features = tf.reshape(features, (-1, input_shape_global[1], input_shape_global[2], input_shape_global[3]))
@@ -28,6 +32,16 @@ def pack_features_vector(features, labels):
 
 
 def data_gen(dir, split, region, deterministic=True, transpose_flag=False, gaf_flag=False):
+    """
+    Data generator method.
+    @param dir: path to data directory
+    @param split: train, val, or test split
+    @param region: target region of files that should be loaded
+    @param deterministic: whether to load the data deterministic or note
+    @param transpose_flag: whether to transpose the tensors or not
+    @param gaf_flag: whether to load the dataset in the gaf format
+    @yield: tuple of features and labels
+    """
     with np.load(os.path.join(dir, split, region)) as data:
 
         if deterministic:
@@ -64,6 +78,22 @@ def data_gen(dir, split, region, deterministic=True, transpose_flag=False, gaf_f
 
 def create_ds(dir, region, split, batch_size=32, in_memory_flag=True, count=False, deterministic=True, transpose_flag=False, gaf_flag=False,
               class_counts_file='class_counts.csv', filter_fn=None, cache_dir=None):
+    """
+    Method to create the tensorflow dataset.
+    @param dir: path to data directory
+    @param region: target region of files that should be loaded
+    @param split: train, val, or test split
+    @param batch_size: batch size for training
+    @param in_memory_flag: whether the data is stored in one array or not
+    @param count: whether to return the counter or not
+    @param deterministic: whether to load the data deterministic or note
+    @param transpose_flag: whether to transpose the tensors or not
+    @param gaf_flag: whether to load the dataset in the gaf format
+    @param class_counts_file: path to class counts file
+    @param filter_fn: filter function to apply
+    @cache_dir: cache directory
+    @return: tuple of dataset and counters
+    """
     if in_memory_flag:
 
         with np.load(os.path.join(dir, split, region + '.npz')) as data:
@@ -104,6 +134,20 @@ def create_ds(dir, region, split, batch_size=32, in_memory_flag=True, count=Fals
 
 def load_data(dir, region, input_shape=(None, 5, 20, 8), batch_size=32, in_memory_flag=True, deterministic=True, transpose_flag=False,
               gaf_flag=False, class_counts_file='class_counts.csv', cache_dir=None):
+    """
+    Method to load data as a tensorflow dataset for training.
+    @param dir: path to data directory
+    @param region: target region of files that should be loaded
+    @param input_shape: shape of the buckets
+    @param batch_size: batch size for training
+    @param in_memory_flag: whether the data is stored in one array or not
+    @param deterministic: whether to load the data deterministic or note
+    @param transpose_flag: whether to transpose the tensors or not
+    @param gaf_flag: whether to load the dataset in the gaf format
+    @param class_counts_file: path to class counts file
+    @cache_dir: cache directory
+    @return: tuple of train, validation, and test dataset plus the class weight dictionary
+    """
     set_input_shape_global(input_shape)
 
     train_ds, pos_train_counter, neg_train_counter = create_ds(dir=dir, region=region, split='train', batch_size=batch_size, in_memory_flag=in_memory_flag, count=True,

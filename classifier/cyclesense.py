@@ -17,6 +17,12 @@ tf.get_logger().setLevel(logging.ERROR)
 
 
 def submodel_acc(input_shape=(None, 5, 20, 14), output_bias=None):
+    '''
+    Definition of the cyclesense accelerometer submodel.
+    @param input_shape: bucket shape
+    @param output_bias: output bias initialization
+    @return: cyclesense accelerometer submodel
+    '''
     if output_bias is not None:
         output_bias = tf.keras.initializers.Constant(output_bias)
 
@@ -55,6 +61,13 @@ def submodel_acc(input_shape=(None, 5, 20, 14), output_bias=None):
 
 
 def submodel_acc_imag(input_shape=(None, 5, 20, 14), output_bias=None, lin_acc_flag=False):
+    '''
+    Definition of the cyclesense accelerometer imaginary submodel.
+    @param input_shape: bucket shape
+    @param output_bias: output bias initialization
+    @param lin_acc_flag: whether the linear accelerometer data was exported, too
+    @return: cyclesense acclerometer imaginary submodel
+    '''
     if output_bias is not None:
         output_bias = tf.keras.initializers.Constant(output_bias)
 
@@ -93,6 +106,12 @@ def submodel_acc_imag(input_shape=(None, 5, 20, 14), output_bias=None, lin_acc_f
 
 
 def submodel_gyro(input_shape=(None, 5, 20, 14), output_bias=None):
+    '''
+    Definition of the cyclesense gyroscope submodel.
+    @param input_shape: bucket shape
+    @param output_bias: output bias initialization
+    @return: cyclesense gyro submodel
+    '''
     if output_bias is not None:
         output_bias = tf.keras.initializers.Constant(output_bias)
 
@@ -131,6 +150,13 @@ def submodel_gyro(input_shape=(None, 5, 20, 14), output_bias=None):
 
 
 def submodel_gyro_imag(input_shape=(None, 5, 20, 14), output_bias=None, lin_acc_flag=False):
+    '''
+    Definition of the cyclesense gyroscope imaginary submodel.
+    @param input_shape: bucket shape
+    @param output_bias: output bias initialization
+    @param lin_acc_flag: whether the linear accelerometer data was exported, too
+    @return: cyclesense gyroscope imaginary submodel
+    '''
     if output_bias is not None:
         output_bias = tf.keras.initializers.Constant(output_bias)
 
@@ -169,6 +195,14 @@ def submodel_gyro_imag(input_shape=(None, 5, 20, 14), output_bias=None, lin_acc_
 
 
 def submodel_gps(input_shape=(None, 5, 20, 14), output_bias=None, fourier_transform_flag=True, lin_acc_flag=False):
+    '''
+    Definition of the cyclesense gps submodel.
+    @param input_shape: bucket shape
+    @param output_bias: output bias initialization
+    @param fourier_transform_flag: whether fourier transform was applied on the data
+    @param lin_acc_flag: whether the linear accelerometer data was exported, too
+    @return: cyclesense gps submodel
+    '''
     if output_bias is not None:
         output_bias = tf.keras.initializers.Constant(output_bias)
 
@@ -216,6 +250,12 @@ def submodel_gps(input_shape=(None, 5, 20, 14), output_bias=None, fourier_transf
 
 
 def submodel_linacc(input_shape=(None, 5, 20, 20), output_bias=None):
+    '''
+    Definition of the cyclesense linacc submodel.
+    @param input_shape: bucket shape
+    @param output_bias: output bias initialization
+    @return: cyclesense linacc submodel
+    '''
     if output_bias is not None:
         output_bias = tf.keras.initializers.Constant(output_bias)
 
@@ -254,6 +294,12 @@ def submodel_linacc(input_shape=(None, 5, 20, 20), output_bias=None):
 
 
 def submodel_linacc_imag(input_shape=(None, 5, 20, 20), output_bias=None):
+    '''
+    Definition of the cyclesense linacc imaginary submodel.
+    @param input_shape: bucket shape
+    @param output_bias: output bias initialization
+    @return: cyclesense linacc imaginary submodel
+    '''
     if output_bias is not None:
         output_bias = tf.keras.initializers.Constant(output_bias)
 
@@ -300,6 +346,23 @@ def cyclesense_model(input_shape=(None, 5, 20, 14), output_bias=None, stacking=T
                     ckpt_cyclesense_linacc='checkpoints/cyclesense_sub_linacc/training',
                     ckpt_cyclesense_linacc_imag='checkpoints/cyclesense_sub_linacc_imag/training',
                     ckpt_cyclesense_gps='checkpoints/cyclesense_sub_gps/training'):
+    '''
+    Definition of the cyclesense model.
+    @param input_shape: bucket shape
+    @param stacking: whether to train with stracking
+    @param freeze: whether to freeze the submodel weights
+    @param fourier_transform_flag: whether fourier transform was applied on the data
+    @param lin_acc_flag: whether the linear accelerometer data was exported, too
+    @param ckpt_cyclesense_acc: checkpoint path cyclesense accelerometer submodel
+    @param ckpt_cyclesense_acc_imag: checkpoint path cyclesense accelerometer imaginary submodel
+    @param ckpt_cyclesense_gyro: checkpoint path cyclesense gyroscope submodel
+    @param ckpt_cyclesense_gyro_imag: checkpoint path cyclesense gyroscope imaginary submodel
+    @param ckpt_cyclesense_linacc: checkpoint path cyclesense linacc submodel
+    @param ckpt_cyclesense_linacc_imag: checkpoint path cyclesense linacc imaginary submodel
+    @param ckpt_cyclesense_gps: checkpoint path cyclesense gps submodel
+    '''
+
+
     if output_bias is not None:
         output_bias = tf.keras.initializers.Constant(output_bias)
 
@@ -614,6 +677,25 @@ def train_submodels(train_ds, val_ds, test_ds, class_weight, num_epochs=10, pati
                     ckpt_cyclesense_linacc_imag='checkpoints/cyclesense_sub_linacc_imag/training',
                     ckpt_cyclesense_gps='checkpoints/cyclesense_sub_gps/training'
                     ):
+    '''
+    Training method for cyclesense submodels model.
+    @param train_ds: training dataset
+    @param val_ds: validation dataset
+    @param test_ds: test dataset
+    @param class_weight: class weight dictionary for weighted loss function
+    @param num_epochs: number of training epochs
+    @param patience: patience
+    @param input_shape: bucket shape
+    @param fourier_transform_flag: whether fourier transform was applied on the data
+    @param lin_acc_flag: whether the linear accelerometer data was exported, too
+    @param ckpt_cyclesense_acc: checkpoint path cyclesense accelerometer submodel
+    @param ckpt_cyclesense_acc_imag: checkpoint path cyclesense accelerometer imaginary submodel
+    @param ckpt_cyclesense_gyro: checkpoint path cyclesense gyroscope submodel
+    @param ckpt_cyclesense_gyro_imag: checkpoint path cyclesense gyroscope imaginary submodel
+    @param ckpt_cyclesense_linacc: checkpoint path cyclesense linacc submodel
+    @param ckpt_cyclesense_linacc_imag: checkpoint path cyclesense linacc imaginary submodel
+    @param ckpt_cyclesense_gps: checkpoint path cyclesense gps submodel
+    '''
     initial_bias = np.log(class_weight[0] / class_weight[1])
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
     loss = tf.keras.losses.BinaryCrossentropy(from_logits=False),
@@ -687,6 +769,28 @@ def train_cyclesense(train_ds, val_ds, test_ds, class_weight, num_epochs=10, pat
                     ckpt_cyclesense_linacc='checkpoints/cyclesense_sub_linacc/training',
                     ckpt_cyclesense_linacc_imag='checkpoints/cyclesense_sub_linacc_imag/training',
                     ckpt_cyclesense_gps='checkpoints/cyclesense_sub_gps/training'):
+    '''
+    Training method for cyclesense model.
+    @param train_ds: training dataset
+    @param val_ds: validation dataset
+    @param test_ds: test dataset
+    @param class_weight: class weight dictionary for weighted loss function
+    @param num_epochs: number of training epochs
+    @param patience: patience
+    @param input_shape: bucket shape
+    @param stacking: whether to train with stracking
+    @param freeze: whether to freeze the submodel weights
+    @param fourier_transform_flag: whether fourier transform was applied on the data
+    @param lin_acc_flag: whether the linear accelerometer data was exported, too
+    @param ckpt_cyclesense: checkpoint path cyclesense model
+    @param ckpt_cyclesense_acc: checkpoint path cyclesense accelerometer submodel
+    @param ckpt_cyclesense_acc_imag: checkpoint path cyclesense accelerometer imaginary submodel
+    @param ckpt_cyclesense_gyro: checkpoint path cyclesense gyroscope submodel
+    @param ckpt_cyclesense_gyro_imag: checkpoint path cyclesense gyroscope imaginary submodel
+    @param ckpt_cyclesense_linacc: checkpoint path cyclesense linacc submodel
+    @param ckpt_cyclesense_linacc_imag: checkpoint path cyclesense linacc imaginary submodel
+    @param ckpt_cyclesense_gps: checkpoint path cyclesense gps submodel
+    '''
     initial_bias = np.log(class_weight[0] / class_weight[1])
 
     model = cyclesense_model(input_shape, initial_bias, stacking=stacking, freeze=freeze,
@@ -767,7 +871,7 @@ def main(argv):
     parser.add_argument('--ckpt_cyclesense_gyro', metavar='<directory>', type=str, help='checkpoint path cyclesense gyroscope submodel', required=False, default='checkpoints/cyclesense_sub_gyro/training')
     parser.add_argument('--ckpt_cyclesense_gyro_imag', metavar='<directory>', type=str, help='checkpoint path cyclesense gyroscope imaginary submodel', required=False, default='checkpoints/cyclesense_sub_gyro_imag/training')
     parser.add_argument('--ckpt_cyclesense_linacc', metavar='<directory>', type=str, help='checkpoint path cyclesense linacc submodel', required=False, default='checkpoints/cyclesense_sub_linacc/training')
-    parser.add_argument('--ckpt_cyclesense_linacc_imag', metavar='<directory>', type=str, help='checkpoint path cyclesense linacc submodel', required=False, default='checkpoints/cyclesense_sub_linacc/training')
+    parser.add_argument('--ckpt_cyclesense_linacc_imag', metavar='<directory>', type=str, help='checkpoint path cyclesense linacc imaginary submodel', required=False, default='checkpoints/cyclesense_sub_linacc/training')
     parser.add_argument('--ckpt_cyclesense_gps', metavar='<directory>', type=str, help='checkpoint path cyclesense gps submodel', required=False, default='checkpoints/cyclesense_sub_gps/training')
     parser.add_argument('--num_epochs', metavar='<int>', type=int, help='training epochs', required=False, default=100)
     parser.add_argument('--patience', metavar='<int>', type=int, help='patience value for early stopping', required=False, default=10)

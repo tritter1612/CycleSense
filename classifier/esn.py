@@ -16,7 +16,9 @@ tf.get_logger().setLevel(logging.ERROR)
 
 
 class ESN_Model(tf.keras.models.Sequential):
-
+    '''
+   Definition of the esn model.
+   '''
     def __init__(self):
         super().__init__()
 
@@ -28,6 +30,16 @@ class ESN_Model(tf.keras.models.Sequential):
 
 def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1,
           checkpoint_dir='checkpoints/esn/training'):
+    '''
+    Training method for esn model.
+    @param train_ds: training dataset
+    @param val_ds: validation dataset
+    @param test_ds: test dataset
+    @param class_weight: class weight dictionary for weighted loss function
+    @param num_epochs: number of training epochs
+    @param patience: patience
+    @param checkpoint_dir: checkpoint directory of esn model
+    '''
     model = ESN_Model()
     model.create_model()
 

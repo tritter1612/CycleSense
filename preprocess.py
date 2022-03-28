@@ -20,12 +20,22 @@ from gan import init_gan, train_gan
 
 
 def sort_timestamps_inner(file):
+    '''
+    Inner sort_timestamps method for parallelization.
+    @param file: file to preprocess
+    '''
     df = pd.read_csv(file)
     df.sort_values(['timeStamp'], axis=0, ascending=True, inplace=True, kind='merge')
     df.to_csv(os.path.join(file), ',', index=False)
 
 
 def sort_timestamps(dir, region='Berlin', pbar=None):
+    '''
+    Method to sort timestamps data points in ride files by their timestamps as some are not in the correct order.
+    @param dir: path to the data directory with the exported files
+    @param region: target region of files that should be preprocessed
+    @param pbar: progress bar
+    '''
     for split in ['train', 'test', 'val']:
         file_list = glob.glob(os.path.join(dir, split, region, 'VM2_*.csv'))
         with mp.Pool(mp.cpu_count()) as pool:
@@ -35,6 +45,10 @@ def sort_timestamps(dir, region='Berlin', pbar=None):
 
 
 def remove_invalid_rides_inner(file):
+    '''
+    Inner remove_invalid_rides method for parallelization.
+    @param file: file to preprocess
+    '''
     df = pd.read_csv(file)
 
     df_cp = df.copy(deep=True)
@@ -50,6 +64,12 @@ def remove_invalid_rides_inner(file):
 
 
 def remove_invalid_rides(dir, region='Berlin', pbar=None):
+    '''
+    Method to remove rides that contain adjacent timestamps that differ by more than 6000 ms as it points at invalid ride files.
+    @param dir: path to the data directory with the exported files
+    @param region: target region of files that should be preprocessed
+    @param pbar: progress bar
+    '''
     for split in ['train', 'test', 'val']:
         file_list = glob.glob(os.path.join(dir, split, region, 'VM2_*.csv'))
 
@@ -60,6 +80,12 @@ def remove_invalid_rides(dir, region='Berlin', pbar=None):
 
 
 def remove_sensor_values_from_gps_timestamps_inner(lin_acc_flag, file):
+    '''
+    Inner remove_sensor_values_from_gps_timestamps method for parallelization.
+    @param lin_acc_flag: whether the linear accelerometer data was exported, too
+    @param file: file to preprocess
+    '''
+
     # for android data remove accelerometer and gyroscope sensor data from gps measurements as timestamps is rounded to seconds and order is not restorable
 
     if os.path.splitext(file)[0][-1] == 'a':
@@ -75,6 +101,13 @@ def remove_sensor_values_from_gps_timestamps_inner(lin_acc_flag, file):
 
 
 def remove_sensor_values_from_gps_timestamps(dir, region='Berlin', lin_acc_flag=False, pbar=None):
+    '''
+    Method to remove the recorded sensor values that are present when a gps sensor value was recorded as they are often faulty or at least time delayed.
+    @param dir: path to the data directory with the exported files
+    @param region: target region of files that should be preprocessed
+    @param lin_acc_flag: whether the linear accelerometer data was exported, too
+    @param pbar: progress bar
+    '''
     for split in ['train', 'test', 'val']:
         file_list = glob.glob(os.path.join(dir, split, region, 'VM2_*.csv'))
 
@@ -85,6 +118,12 @@ def remove_sensor_values_from_gps_timestamps(dir, region='Berlin', lin_acc_flag=
 
 
 def remove_acc_outliers_inner(lower, upper, file):
+    '''
+    Inner remove_acc_outliers method for parallelization.
+    @param lower: lower border
+    @param upper: upper border
+    @param file: file to preprcess
+    '''
     df = pd.read_csv(file)
     arr = df[['acc']].to_numpy()
 
@@ -104,6 +143,12 @@ def remove_acc_outliers_inner(lower, upper, file):
 
 
 def remove_acc_outliers(dir, region='Berlin', pbar=None):
+    '''
+    Method to remove gps accuracy outliers.
+    @param dir: path to the data directory with the exported files
+    @param region: target region of files that should be preprocessed
+    @param pbar: progress bar
+    '''
     l = []
     split = 'train'
 
@@ -138,22 +183,11 @@ def remove_acc_outliers(dir, region='Berlin', pbar=None):
     pbar.update(1) if pbar is not None else print()
 
 
-def remove_acc_column_inner(file):
-    df = pd.read_csv(file)
-    df.drop(columns=['acc'], inplace=True)
-    df.to_csv(file, ',', index=False)
-
-
-def remove_acc_column(dir, region='Berlin', pbar=None):
-    for split in ['train', 'test', 'val']:
-        file_list = glob.glob(os.path.join(dir, split, region, 'VM2_*.csv'))
-        with mp.Pool(mp.cpu_count()) as pool:
-            pool.map(remove_acc_column_inner, file_list)
-
-    pbar.update(1) if pbar is not None else print()
-
-
 def calc_vel_delta_inner(file):
+    '''
+    Inner calc_vel_delta method for parallelization.
+    @param file: file to preprocess
+    '''
     df = pd.read_csv(file)
 
     df_cp = df.copy(deep=True)
@@ -169,6 +203,12 @@ def calc_vel_delta_inner(file):
 
 
 def calc_vel_delta(dir, region='Berlin', pbar=None):
+    '''
+    Method to calculate the "velocity" data deltas based on the gps longitude and latitude.
+    @param dir: path to the data directory with the exported files
+    @param region: target region of files that should be preprocessed
+    @param pbar: progress bar
+    '''
     for split in ['train', 'test', 'val']:
         file_list = glob.glob(os.path.join(dir, split, region, 'VM2_*.csv'))
         with mp.Pool(mp.cpu_count()) as pool:
@@ -178,6 +218,11 @@ def calc_vel_delta(dir, region='Berlin', pbar=None):
 
 
 def linear_interpolate(lin_acc_flag, file):
+    '''
+    Method to apply linear interpolation on the ride files.
+    @param lin_acc_flag: whether the linear accelerometer data was exported, too
+    @param file: file to preprocess.
+    '''
     df = pd.read_csv(file)
 
     # convert timestamp to datetime format
@@ -219,6 +264,12 @@ def linear_interpolate(lin_acc_flag, file):
 
 
 def equidistant_interpolate(time_interval, lin_acc_flag, file):
+    '''
+    Method to apply equidistant interpolation on the ride files.
+    @param time_interval: interval between adjacent timestamps (only relevant with equidistant interpolation)
+    @param lin_acc_flag: whether the linear accelerometer data was exported, too
+    @param file: file to preprocess.
+    '''
     df = pd.read_csv(file)
 
     # floor start_time so that full seconds are included in the new timestamp series (time_interval may be 50, 100, 125 or 200ms)
@@ -304,6 +355,15 @@ def equidistant_interpolate(time_interval, lin_acc_flag, file):
 
 
 def interpolate(dir, region='Berlin', time_interval=100, interpolation_type='equidistant', lin_acc_flag=False, pbar=None):
+    '''
+    Dispatcher method to apply interpolation on the ride files.
+    @param dir: path to the data directory with the exported files
+    @param region: target region of files that should be preprocessed
+    @param time_interval: interval between adjacent timestamps (only relevant with equidistant interpolation)
+    @param interpolation_type: whether linear or equidistant interpolation should be used
+    @param lin_acc_flag: whether the linear accelerometer data was exported, too
+    @param pbar: progress bar
+    '''
     for split in ['train', 'test', 'val']:
 
         file_list = glob.glob(os.path.join(dir, split, region, 'VM2_*.csv'))
@@ -324,6 +384,12 @@ def interpolate(dir, region='Berlin', time_interval=100, interpolation_type='equ
 
 
 def remove_vel_outliers_inner(lower, upper, file):
+    '''
+    Inner remove_vel_outliers method for parallelization.
+    @param lower: lower border
+    @param upper: upper border
+    @param file: file to preprcess
+    '''
     df = pd.read_csv(file)
 
     arr = df[['lat', 'lon']].to_numpy()
@@ -341,6 +407,13 @@ def remove_vel_outliers_inner(lower, upper, file):
 
 
 def remove_vel_outliers(dir, region='Berlin', verbose=3, pbar=None):
+    '''
+    Method to remove velocity outliers.
+    @param dir: path to the data directory with the exported files
+    @param region: target region of files that should be preprocessed
+    @param verbose: level of information displayed
+    @param pbar: progress bar
+    '''
     l = []
 
     for file in glob.glob(os.path.join(dir, 'train', region, 'VM2_*.csv')):
@@ -379,6 +452,10 @@ def remove_vel_outliers(dir, region='Berlin', verbose=3, pbar=None):
 
 
 def remove_empty_rows_inner(file):
+    '''
+    Inner remove_empty_rows method for parallelization.
+    @param file: file to preprocess
+    '''
     df = pd.read_csv(file)
     df.dropna(inplace=True, axis=0)
 
@@ -389,6 +466,12 @@ def remove_empty_rows_inner(file):
 
 
 def remove_empty_rows(dir, region='Berlin', pbar=None):
+    '''
+    Method to remove the empty rows in ride files.
+    @param dir: path to the data directory with the exported files
+    @param region: target region of files that should be preprocessed
+    @param pbar: progress bar
+    '''
     for split in ['train', 'test', 'val']:
         file_list = glob.glob(os.path.join(dir, split, region, 'VM2_*.csv'))
         with mp.Pool(mp.cpu_count()) as pool:
@@ -398,6 +481,12 @@ def remove_empty_rows(dir, region='Berlin', pbar=None):
 
 
 def scale_inner(scaler_maxabs, lin_acc_flag, file):
+    '''
+    Inner scale method for parallelization.
+    @param scaler_maxabs: max absolute scaler
+    @param lin_acc_flag: whether the linear accelerometer data was exported, too
+    @param file: file to preprocess
+    '''
     df = pd.read_csv(file)
     if lin_acc_flag:
         df[['lat', 'lon', 'X', 'Y', 'Z', 'a', 'b', 'c','XL','YL','ZL']] = scaler_maxabs.transform(
@@ -412,12 +501,21 @@ def scale_inner(scaler_maxabs, lin_acc_flag, file):
 
 
 def scale(dir, region='Berlin', lin_acc_flag=False, verbose=3, pbar=None):
+    '''
+    Method to scale the ride files.
+    @param dir: path to the data directory with the exported files
+    @param region: target region of files that should be preprocessed
+    @param lin_acc_flag: whether the linear accelerometer data was exported, too
+    @param verbose: level of information displayed
+    @param pbar: progress bar
+    '''
     scaler_maxabs = MaxAbsScaler()
 
     split = 'train'
 
     scaler_file = os.path.join(dir, 'scaler.save')
 
+    # load scaler if it was saved before
     if os.path.isfile(scaler_file):
         scaler_maxabs = joblib.load(scaler_file)
     else:
@@ -445,6 +543,16 @@ def scale(dir, region='Berlin', lin_acc_flag=False, verbose=3, pbar=None):
 
 
 def create_buckets(dir, region='Berlin', in_memory_flag=True, window_size=5, slices=20, class_counts_file='class_counts.csv', pbar=None):
+    '''
+    Method to create the buckets from the ride files.
+    @param dir: path to the data directory with the exported files
+    @param region: target region of files that should be preprocessed
+    @param in_memory_flag: whether to store the dataset in one array or not
+    @param window_size: bucket height
+    @param slices: bucket width
+    @param class_counts_file: path to class counts file
+    @param pbar: progress bar
+    '''
     class_counts_df = pd.DataFrame()
 
     for split in ['train', 'test', 'val']:
@@ -508,14 +616,22 @@ def create_buckets(dir, region='Berlin', in_memory_flag=True, window_size=5, sli
         os.rmdir(os.path.join(dir, split, region))
 
         if in_memory_flag:
+            # save as one array in .npz file
             np.savez(os.path.join(dir, split, region + '.npz'), buckets_list)
         else:
+            # save as seperate arrays in .npz file
             np.savez(os.path.join(dir, split, region + '.npz'), **buckets_dict)
 
     pbar.update(1) if pbar is not None else print()
 
 
-def rotate_bucket(ride_image, axis):
+def rotate_bucket(bucket, axis):
+    '''
+    Method to rotate existing incident buckets for data augmentation.
+    @param bucket: bucket
+    @param axis: axis around which to rotate bucket
+    @return: rotated bucket
+    '''
     if axis == 0:
         # 180 degree rotation matrix around X axis
         R = [[1, 0, 0],
@@ -537,18 +653,26 @@ def rotate_bucket(ride_image, axis):
     else:
         return None
 
-    ride_image_acc = ride_image[:, :, :3]
-    ride_image_gyro = ride_image[:, :, 3:6]
+    ride_image_acc = bucket[:, :, :3]
+    ride_image_gyro = bucket[:, :, 3:6]
 
     ride_image_acc_rotated = np.matmul(ride_image_acc, R)
     ride_image_gyro_rotated = np.matmul(ride_image_gyro, R)
 
-    ride_image_rotated = np.concatenate((ride_image_acc_rotated, ride_image_gyro_rotated, ride_image[:, :, 6:]), axis=2)
+    ride_image_rotated = np.concatenate((ride_image_acc_rotated, ride_image_gyro_rotated, bucket[:, :, 6:]), axis=2)
 
     return ride_image_rotated
 
 
 def augment_data_inner(dir, region, rotation_flag, files):
+    '''
+    Inner augment_data method for parallelization.
+    @param dir: path to the data directory with the exported files
+    @param region: target region of files that should be preprocessed
+    @param rotation_flag: whether to use rotation for data augmentation
+    @param files: files to preprocess
+    @return: dictionary containing augmented buckets and an updated pos_counter
+    '''
 
     ride_data_dict = {}
     data_loaded = np.load(os.path.join(dir, 'train', region + '.npz'))
@@ -581,7 +705,22 @@ def augment_data_inner(dir, region, rotation_flag, files):
 
 def augment_data(dir, region='Berlin', in_memory_flag=True, rotation_flag=False, gan_flag=False, num_epochs=1000,
                  batch_size=128, latent_dim=100, input_shape=(None, 5, 20, 8), class_counts_file='class_counts.csv', gan_checkpoint_dir='gan_checkpoints', verbose=3, pbar=None):
-
+    '''
+    Method for data augmentation via rotation or using the GAN.
+    @param dir: path to the data directory with the exported files
+    @param region: target region of files that should be preprocessed
+    @param in_memory_flag: whether to store the dataset in one array or not
+    @param rotation_flag: whether to use rotation for data augmentation
+    @param gan_flag: whether to use a GAN for data augmentation
+    @param num_epochs: training epochs GAN
+    @param batch_size: batch size GAN training
+    @param latent_dim: noise input dimensionality GAN
+    @param input_shape: shape of the resulting buckets
+    @param class_counts_file: path to class counts file
+    @param gan_checkpoint_dir: path to gan checkpoint directory
+    @param verbose: level of information displayed
+    @param pbar: progress bar
+    '''
     if rotation_flag or gan_flag:
 
         class_counts_df = pd.read_csv(os.path.join(dir, class_counts_file))
@@ -691,7 +830,14 @@ def augment_data(dir, region='Berlin', in_memory_flag=True, rotation_flag=False,
     pbar.update(1) if pbar is not None else print()
 
 
-def fourier_transform_off_memory(dir, split, region, window_size, slices, file_list):
+def fourier_transform_off_memory(dir, split, region, file_list):
+    '''
+    Method to apply dft to off memory ride files.
+    @param dir: path to the data directory with the exported files
+    @param split: target region of files that should be preprocessed
+    @param file_list: list of files to preprocessed
+    @return: dictionary of fourier transformed buckets
+    '''
     ride_data_dict = {}
 
     data_loaded = np.load(os.path.join(dir, split, region + '.npz'))
@@ -714,7 +860,15 @@ def fourier_transform_off_memory(dir, split, region, window_size, slices, file_l
     return ride_data_dict
 
 
-def fourier_transform(dir, region='Berlin', in_memory_flag=True, fourier_transform_flag=False, window_size=5, slices=20, pbar=None):
+def fourier_transform(dir, region='Berlin', in_memory_flag=True, fourier_transform_flag=False, pbar=None):
+    '''
+    Method to apply dft to the ride files.
+    @param dir: path to the data directory with the exported files
+    @param region: target region of files that should be preprocessed
+    @param in_memory_flag: whether to store the dataset in one array or not
+    @param fourier_transform_flag: whether to apply fourier transform or not
+    @param pbar: progress bar
+    '''
 
     if fourier_transform_flag:
 
@@ -742,8 +896,7 @@ def fourier_transform(dir, region='Berlin', in_memory_flag=True, fourier_transfo
 
                 with mp.Pool(mp.cpu_count()) as pool:
                     results = pool.map(
-                        partial(fourier_transform_off_memory, dir, split, region, window_size, slices),
-                        file_list_splits)
+                        partial(fourier_transform_off_memory, dir, split, region), file_list_splits)
                     ride_data_dict = {}
                     for result in results:
                         ride_data_dict.update(result)
@@ -760,6 +913,28 @@ def preprocess(dir, region='Berlin', interpolation_type='equidistant', time_inte
                lin_acc_flag=False, in_memory_flag=True, fourier_transform_flag=True, rotation_flag=False,
                gan_flag=True, num_epochs=1000, batch_size=128, latent_dim=100, input_shape=(None, 5, 20, 8),
                class_counts_file='class_counts.csv', gan_checkpoint_dir='./gan_checkpoints', verbose=3):
+    '''
+    Preprocessing of the ride files that where previously exported. This preprocessing pipeline consists of several steps and ultimately
+     results in a file format compatible with the CycleSense model.
+    @param dir: path to the data directory with the exported files
+    @param region: target region of files that should be preprocessed
+    @param interpolation_type: whether linear or equidistant interpolation should be used
+    @param time_interval: interval between adjacent timestamps (only relevant with equidistant interpolation)
+    @param window_size: bucket height
+    @param slices: bucket width
+    @param lin_acc_flag: whether the linear accelerometer data was exported, too
+    @param in_memory_flag: whether to store the dataset in one array or not
+    @param fourier_transform_flag: whether to apply fourier transform or not
+    @param rotation_flag: whether to use rotation for data augmentation
+    @param gan_flag: whether to use a GAN for data augmentation
+    @param num_epochs: training epochs GAN
+    @param batch_size: batch size GAN training
+    @param latent_dim: noise input dimensionality GAN
+    @param input_shape: shape of the resulting buckets
+    @param class_counts_file: path to class counts file
+    @param gan_checkpoint_dir: path to gan checkpoint directory
+    @param verbose: level of information displayed
+    '''
 
     with tqdm(total=12, desc='preprocess') as pbar:
         sort_timestamps(dir=dir, region=region, pbar=pbar)
@@ -779,8 +954,7 @@ def preprocess(dir, region='Berlin', interpolation_type='equidistant', time_inte
                      batch_size=batch_size, latent_dim=latent_dim, input_shape=input_shape, class_counts_file=class_counts_file,
                      gan_checkpoint_dir=gan_checkpoint_dir, verbose=verbose, pbar=pbar)
 
-        fourier_transform(dir=dir, region=region, in_memory_flag=in_memory_flag, fourier_transform_flag=fourier_transform_flag,
-                          window_size=window_size, slices=slices, pbar=pbar)
+        fourier_transform(dir=dir, region=region, in_memory_flag=in_memory_flag, fourier_transform_flag=fourier_transform_flag, pbar=pbar)
 
 
 def main(argv):
@@ -788,7 +962,7 @@ def main(argv):
     parser.add_argument('dir', metavar='<directory>', type=str, help='path to the data directory')
     parser.add_argument('--region', metavar='<region>', type=str, help='target region', required=False, default='Berlin')
     parser.add_argument('--interpolation_type', metavar='<interpolation_type>', type=str, help='whether to use linear or equidistant interpolation', required=False, default='equidistant')
-    parser.add_argument('--time_interval', metavar='<int>', type=int, help='interval between time stamps in ms', required=False, default=100)
+    parser.add_argument('--time_interval', metavar='<int>', type=int, help='interval between timestamps in ms', required=False, default=100)
     parser.add_argument('--window_size', metavar='<int>', type=int, help='bucket height', required=False, default=5)
     parser.add_argument('--slices', metavar='<int>', type=int, help='bucket width', required=False, default=20)
     parser.add_argument('--lin_acc_flag', metavar='<bool>', type=bool, help='whether the linear accelerometer data was exported, too', required=False, default=False)

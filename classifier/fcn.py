@@ -10,6 +10,9 @@ from tensorflow.keras.layers import Dense, Flatten, Reshape, Input
 tf.get_logger().setLevel(logging.ERROR)
 
 class FCN(tf.keras.models.Sequential):
+    '''
+    Definition of the fcn model.
+    '''
 
     def __init__(self):
         super().__init__()
@@ -24,6 +27,10 @@ class FCN(tf.keras.models.Sequential):
 
 
 def normalize(dir):
+    '''
+    Scale and normalize data.
+    @param dir: data directory
+    '''
 
     scaler_std = StandardScaler()
     one_hot_encoder = OneHotEncoder(handle_unknown='ignore')
@@ -120,6 +127,15 @@ def load_data(dir, batch_size=128):
 
 
 def train_classifier(train_ds, val_ds, test_ds, num_epochs=10, patience=1, checkpoint_dir='checkpoints/cnn/training'):
+    '''
+    Training method for fcn model.
+    @param train_ds: training dataset
+    @param val_ds: validation dataset
+    @param test_ds: test dataset
+    @param num_epochs: number of training epochs
+    @param patience: patience
+    @param checkpoint_dir: checkpoint directory of fcn model
+    '''
 
     model = FCN()
     model.create_model()

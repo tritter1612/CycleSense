@@ -15,6 +15,9 @@ tf.get_logger().setLevel(logging.ERROR)
 
 
 class CNN_(tf.keras.models.Sequential):
+    '''
+    Definition of the CNN model for gaf classification.
+    '''
 
     def __init__(self):
         super().__init__()
@@ -28,6 +31,16 @@ class CNN_(tf.keras.models.Sequential):
 
 def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1,
           checkpoint_dir='checkpoints/gaf_cnn/training'):
+    '''
+    Training method for cnn model for gaf classification.
+    @param train_ds: training dataset
+    @param val_ds: validation dataset
+    @param test_ds: test dataset
+    @param num_epochs: number of training epochs
+    @param patience: patience
+    @param checkpoint_dir: checkpoint directory of cnn model for gaf classification
+    '''
+
     model = CNN_()
     model.create_model()
 

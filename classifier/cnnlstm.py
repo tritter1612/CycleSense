@@ -15,7 +15,9 @@ tf.get_logger().setLevel(logging.ERROR)
 
 
 class CNN_LSTM_(tf.keras.models.Sequential):
-
+    '''
+    Definition of the cnnlstm model.
+    '''
     def __init__(self):
         super().__init__()
 
@@ -32,6 +34,16 @@ class CNN_LSTM_(tf.keras.models.Sequential):
 
 def train(train_ds, val_ds, test_ds, class_weight, num_epochs=10, patience=1,
           checkpoint_dir='checkpoints/cnnlstm/training'):
+    '''
+    Training method for cnnlstm model.
+    @param train_ds: training dataset
+    @param val_ds: validation dataset
+    @param test_ds: test dataset
+    @param class_weight: class weight dictionary for weighted loss function
+    @param num_epochs: number of training epochs
+    @param patience: patience
+    @param checkpoint_dir: checkpoint directory of cnnlstm model
+    '''
     model = CNN_LSTM_()
     model.create_model()
 

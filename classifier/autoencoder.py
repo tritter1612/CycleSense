@@ -11,6 +11,10 @@ tf.get_logger().setLevel(logging.ERROR)
 
 
 def autoencoder():
+    '''
+    Definition of the autoencoder model.
+    @return: the autoencoder model
+    '''
     x = tf.keras.layers.Input(shape=(20, 5, 8))
 
     encode = Flatten()(x)
@@ -31,6 +35,11 @@ def autoencoder():
 
 
 def classifier(autoencoder_checkpoint_dir):
+    '''
+    Definition of the autoencoder classifier model.
+    @param autoencoder_checkpoint_dir: checkpoint directory of autoencoder model
+    @return: the autoencoder classifier model
+    '''
     x = tf.keras.layers.Input(shape=(20, 5, 8))
 
     encode1 = Flatten()(x)
@@ -63,6 +72,14 @@ def classifier(autoencoder_checkpoint_dir):
 
 def train_autoencoder(train_ds, val_ds, num_epochs=10, patience=1,
                       autoencoder_checkpoint_dir='checkpoints/autoencoder_classifier/training'):
+    '''
+    Training method for autoencoder model.
+    @param train_ds: training dataset
+    @param val_ds: validation dataset
+    @param num_epochs: number of training epochs
+    @param patience: patience
+    @param autoencoder_checkpoint_dir: checkpoint directory of autoencoder model
+    '''
     model = autoencoder()
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
@@ -106,6 +123,17 @@ def train_autoencoder(train_ds, val_ds, num_epochs=10, patience=1,
 def train_classifier(train_ds, val_ds, test_ds, class_weight={0: 0.5, 1: 0.5}, num_epochs=10, patience=1,
                      autoencoder_checkpoint_dir='checkpoints/autoencoder/training',
                      classifier_checkpoint_dir='checkpoints/autoencoder_classifier/training'):
+    '''
+    Training method for autoencoder classifier model.
+    @param train_ds: training dataset
+    @param val_ds: validation dataset
+    @param test_ds: test dataset
+    @param class_weight: class weight dictionary for weighted loss function
+    @param num_epochs: number of training epochs
+    @param patience: patience
+    @param autoencoder_checkpoint_dir: checkpoint directory of autoencoder model
+    @param classifier_checkpoint_dir: checkpoint directory of autoencoder classifier model
+    '''
     model = classifier(autoencoder_checkpoint_dir)
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
