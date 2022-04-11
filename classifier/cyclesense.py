@@ -871,7 +871,7 @@ def main(argv):
     parser.add_argument('--ckpt_cyclesense_gyro', metavar='<directory>', type=str, help='checkpoint path cyclesense gyroscope submodel', required=False, default='checkpoints/cyclesense_sub_gyro/training')
     parser.add_argument('--ckpt_cyclesense_gyro_imag', metavar='<directory>', type=str, help='checkpoint path cyclesense gyroscope imaginary submodel', required=False, default='checkpoints/cyclesense_sub_gyro_imag/training')
     parser.add_argument('--ckpt_cyclesense_linacc', metavar='<directory>', type=str, help='checkpoint path cyclesense linacc submodel', required=False, default='checkpoints/cyclesense_sub_linacc/training')
-    parser.add_argument('--ckpt_cyclesense_linacc_imag', metavar='<directory>', type=str, help='checkpoint path cyclesense linacc imaginary submodel', required=False, default='checkpoints/cyclesense_sub_linacc/training')
+    parser.add_argument('--ckpt_cyclesense_linacc_imag', metavar='<directory>', type=str, help='checkpoint path cyclesense linacc imaginary submodel', required=False, default='checkpoints/cyclesense_sub_linacc_imag/training')
     parser.add_argument('--ckpt_cyclesense_gps', metavar='<directory>', type=str, help='checkpoint path cyclesense gps submodel', required=False, default='checkpoints/cyclesense_sub_gps/training')
     parser.add_argument('--num_epochs', metavar='<int>', type=int, help='training epochs', required=False, default=100)
     parser.add_argument('--patience', metavar='<int>', type=int, help='patience value for early stopping', required=False, default=10)
